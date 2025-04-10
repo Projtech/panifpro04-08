@@ -1,0 +1,88 @@
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 36 100% 99%;
+    --foreground: 32 98% 15%;
+
+    --card: 36 100% 99%;
+    --card-foreground: 32 98% 15%;
+
+    --popover: 36 100% 99%;
+    --popover-foreground: 32 98% 15%;
+
+    --primary: 32 92% 51%; /* Warm amber */
+    --primary-foreground: 36 100% 99%;
+
+    --secondary: 32 75% 27%; /* Deep brown */
+    --secondary-foreground: 36 100% 99%;
+
+    --muted: 32 30% 94%;
+    --muted-foreground: 32 30% 40%;
+
+    --accent: 32 30% 90%;
+    --accent-foreground: 32 75% 27%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 36 100% 99%;
+
+    --border: 32 30% 90%;
+    --input: 32 30% 90%;
+    --ring: 32 92% 51%;
+
+    --radius: 0.5rem;
+
+    --sidebar-background: 32 75% 27%;
+    --sidebar-foreground: 36 100% 96%;
+    --sidebar-primary: 32 92% 51%;
+    --sidebar-primary-foreground: 36 100% 99%;
+    --sidebar-accent: 32 69% 35%;
+    --sidebar-accent-foreground: 36 100% 96%;
+    --sidebar-border: 32 69% 35%;
+    --sidebar-ring: 32 92% 51%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Inter', sans-serif;
+  }
+}
+
+@layer components {
+  .section-title {
+    @apply text-2xl font-semibold text-bakery-brown mb-4;
+  }
+
+  .form-label {
+    @apply block text-sm font-medium text-bakery-brown mb-1;
+  }
+
+  .form-input {
+    @apply mt-1 block w-full rounded-md border-bakery-cream shadow-sm focus:border-bakery-amber focus:ring focus:ring-bakery-amber focus:ring-opacity-50;
+  }
+
+  .data-table {
+    @apply min-w-full divide-y divide-bakery-cream;
+  }
+
+  .data-table-header {
+    @apply bg-bakery-cream text-left text-xs font-semibold text-bakery-brown uppercase tracking-wider;
+  }
+
+  .data-table-cell {
+    @apply px-6 py-4 whitespace-nowrap text-sm text-gray-800;
+  }
+  
+  .alert-stock {
+    @apply text-bakery-alert font-medium;
+  }
+}
