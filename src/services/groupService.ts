@@ -18,8 +18,16 @@ export interface Subgroup {
   created_at: string;
 }
 
+// Função para tratar erros de forma consistente
+const handleError = (error: any, message: string) => {
+  console.error(message, error);
+  toast.error(message);
+  return null;
+};
+
 export async function getGroups(): Promise<Group[]> {
   try {
+    // Usar uma query raw para garantir compatibilidade
     const { data, error } = await supabase
       .from('groups')
       .select('*');
@@ -36,10 +44,11 @@ export async function getGroups(): Promise<Group[]> {
 
 export async function getSubgroups(groupId?: string): Promise<Subgroup[]> {
   try {
-    const query = supabase.from('subgroups').select('*');
+    // Usar uma query raw para garantir compatibilidade
+    let query = supabase.from('subgroups').select('*');
     
     if (groupId) {
-      query.eq('group_id', groupId);
+      query = query.eq('group_id', groupId);
     }
     
     const { data, error } = await query;
@@ -67,9 +76,54 @@ export async function createGroup(groupData: Omit<Group, 'id' | 'created_at'>): 
     toast.success("Grupo criado com sucesso");
     return data;
   } catch (error) {
-    console.error("Erro ao criar grupo:", error);
-    toast.error("Não foi possível criar o grupo");
-    return null;
+    return handleError(error, "Não foi possível criar o grupo");
+  }
+}
+
+export async function updateGroup(id: string, groupData: Partial<Omit<Group, 'id' | 'created_at'>>): Promise<Group | null> {
+  try {
+    const { data, error } = await supabase
+      .from('groups')
+      .update(groupData)
+      .eq('id', id)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    
+    toast.success("Grupo atualizado com sucesso");
+    return data;
+  } catch (error) {
+    return handleError(error, "Não foi possível atualizar o grupo");
+  }
+}
+
+export async function deleteGroup(id: string): Promise<boolean> {
+  try {
+    // Primeiro verificar se existem subgrupos associados
+    const { data: subgroups } = await supabase
+      .from('subgroups')
+      .select('id')
+      .eq('group_id', id);
+    
+    if (subgroups && subgroups.length > 0) {
+      toast.error("Não é possível excluir o grupo porque existem subgrupos associados");
+      return false;
+    }
+    
+    const { error } = await supabase
+      .from('groups')
+      .delete()
+      .eq('id', id);
+    
+    if (error) throw error;
+    
+    toast.success("Grupo excluído com sucesso");
+    return true;
+  } catch (error) {
+    console.error("Erro ao excluir grupo:", error);
+    toast.error("Não foi possível excluir o grupo");
+    return false;
   }
 }
 
@@ -86,8 +140,42 @@ export async function createSubgroup(subgroupData: Omit<Subgroup, 'id' | 'create
     toast.success("Subgrupo criado com sucesso");
     return data;
   } catch (error) {
-    console.error("Erro ao criar subgrupo:", error);
-    toast.error("Não foi possível criar o subgrupo");
-    return null;
+    return handleError(error, "Não foi possível criar o subgrupo");
+  }
+}
+
+export async function updateSubgroup(id: string, subgroupData: Partial<Omit<Subgroup, 'id' | 'created_at'>>): Promise<Subgroup | null> {
+  try {
+    const { data, error } = await supabase
+      .from('subgroups')
+      .update(subgroupData)
+      .eq('id', id)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    
+    toast.success("Subgrupo atualizado com sucesso");
+    return data;
+  } catch (error) {
+    return handleError(error, "Não foi possível atualizar o subgrupo");
+  }
+}
+
+export async function deleteSubgroup(id: string): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from('subgroups')
+      .delete()
+      .eq('id', id);
+    
+    if (error) throw error;
+    
+    toast.success("Subgrupo excluído com sucesso");
+    return true;
+  } catch (error) {
+    console.error("Erro ao excluir subgrupo:", error);
+    toast.error("Não foi possível excluir o subgrupo");
+    return false;
   }
 }

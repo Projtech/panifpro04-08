@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { Card } from "@/components/ui/card";
@@ -91,7 +92,9 @@ export default function ProductionOrderForm() {
   const [orderStatus, setOrderStatus] = useState<'pending' | 'in_progress' | 'completed'>('pending');
   const [orderRecipes, setOrderRecipes] = useState<OrderRecipe[]>([]);
   const [showMaterialsList, setShowMaterialsList] = useState(false);
-  const [isFromCalendar, setIsFromCalendar] = useState(false);
+  
+  // Novo estado para rastrear origem do pedido
+  const [orderOrigin, setOrderOrigin] = useState<'manual' | 'calendar'>('manual');
   
   const [newRecipeId, setNewRecipeId] = useState('');
   const [newRecipeQuantity, setNewRecipeQuantity] = useState('');
@@ -111,8 +114,52 @@ export default function ProductionOrderForm() {
     loadRecipes();
   }, []);
   
+  useEffect(() => {
+    // Detectar se a navegação veio do calendário
+    if (state?.calendarItems && state.calendarItems.length > 0) {
+      setOrderOrigin('calendar');
+      
+      if (state.calendarDate) {
+        setOrderDate(state.calendarDate);
+      }
+      
+      // Carregar produtos do calendário apenas se receitas já estiverem carregadas
+      if (recipes.length > 0) {
+        const calendarRecipes: OrderRecipe[] = state.calendarItems.map(item => {
+          const recipe = recipes.find(r => r.id === item.recipe_id);
+          let convertedQuantity = calculateConvertedQuantity(item, recipe);
+          
+          return {
+            id: `cal-recipe-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+            recipeId: item.recipe_id,
+            recipeName: item.recipe_name,
+            quantity: item.unit === 'kg' ? item.planned_quantity_kg : (item.planned_quantity_units || 0),
+            unit: item.unit as 'kg' | 'un',
+            convertedQuantity,
+            fromCalendar: true
+          };
+        });
+        
+        setOrderRecipes(calendarRecipes);
+      }
+    }
+  }, [state, recipes]);
+  
   const [materials, setMaterials] = useState<MaterialItem[]>([]);
   const [loadingMaterials, setLoadingMaterials] = useState(false);
+  
+  // Função auxiliar para cálculo de conversão de quantidade
+  const calculateConvertedQuantity = (item: any, recipe?: Recipe) => {
+    if (!recipe) return 0;
+
+    return item.unit === 'kg' 
+      ? (recipe.yield_units && recipe.yield_units > 0) 
+        ? item.planned_quantity_kg * (recipe.yield_units / recipe.yield_kg) 
+        : 0
+      : item.planned_quantity_units 
+        ? item.planned_quantity_units * (recipe.yield_kg / (recipe.yield_units || 1))
+        : 0;
+  };
   
   const calculateMaterials = async () => {
     setLoadingMaterials(true);
@@ -232,56 +279,6 @@ export default function ProductionOrderForm() {
     setShowMaterialsList(true);
   };
   
-  const isEditing = !!id;
-  const isViewOnly = isEditing && orderStatus === 'completed';
-
-  // Novo estado para rastrear origem do pedido
-  const [orderOrigin, setOrderOrigin] = useState<'manual' | 'calendar'>('manual');
-
-  useEffect(() => {
-    // Detectar se a navegação veio do calendário
-    if (state?.calendarItems && state.calendarItems.length > 0) {
-      setOrderOrigin('calendar');
-      
-      if (state.calendarDate) {
-        setOrderDate(state.calendarDate);
-      }
-      
-      // Carregar produtos do calendário apenas se receitas já estiverem carregadas
-      if (recipes.length > 0) {
-        const calendarRecipes: OrderRecipe[] = state.calendarItems.map(item => {
-          const recipe = recipes.find(r => r.id === item.recipe_id);
-          let convertedQuantity = calculateConvertedQuantity(item, recipe);
-          
-          return {
-            id: `cal-recipe-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-            recipeId: item.recipe_id,
-            recipeName: item.recipe_name,
-            quantity: item.unit === 'kg' ? item.planned_quantity_kg : (item.planned_quantity_units || 0),
-            unit: item.unit as 'kg' | 'un',
-            convertedQuantity,
-            fromCalendar: true
-          };
-        });
-        
-        setOrderRecipes(calendarRecipes);
-      }
-    }
-  }, [state, recipes]);
-
-  // Função auxiliar para cálculo de conversão de quantidade
-  const calculateConvertedQuantity = (item: any, recipe?: Recipe) => {
-    if (!recipe) return 0;
-
-    return item.unit === 'kg' 
-      ? (recipe.yield_units && recipe.yield_units > 0) 
-        ? item.planned_quantity_kg * (recipe.yield_units / recipe.yield_kg) 
-        : 0
-      : item.planned_quantity_units 
-        ? item.planned_quantity_units * (recipe.yield_kg / (recipe.yield_units || 1))
-        : 0;
-  };
-
   // Modificar handleSave para distinguir origem do pedido
   const handleSave = async () => {
     if (orderRecipes.length === 0) {
@@ -379,7 +376,7 @@ export default function ProductionOrderForm() {
           </p>
         </div>
         
-        {isFromCalendar && (
+        {orderOrigin === 'calendar' && (
           <div className="flex items-center text-bakery-amber bg-amber-50 px-3 py-1 rounded-lg border border-amber-200">
             <Calendar className="h-4 w-4 mr-2" />
             <span className="text-sm font-medium">Pedido do Calendário</span>
