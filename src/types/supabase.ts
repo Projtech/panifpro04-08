@@ -293,47 +293,46 @@ export type Database = {
       }
       groups: {
         Row: {
-          id: string;
-          name: string;
-          description: string | null;
-          created_at: string;
+          id: string
+          name: string
+          description: string | null
+          created_at: string
         }
         Insert: {
-          id?: string;
-          name: string;
-          description?: string | null;
-          created_at?: string;
+          id?: string
+          name: string
+          description?: string | null
+          created_at?: string
         }
         Update: {
-          id?: string;
-          name?: string;
-          description?: string | null;
-          created_at?: string;
+          id?: string
+          name?: string
+          description?: string | null
+          created_at?: string
         }
         Relationships: []
       }
-
       subgroups: {
         Row: {
-          id: string;
-          name: string;
-          description: string | null;
-          group_id: string;
-          created_at: string;
+          id: string
+          name: string
+          description: string | null
+          group_id: string
+          created_at: string
         }
         Insert: {
-          id?: string;
-          name: string;
-          description?: string | null;
-          group_id: string;
-          created_at?: string;
+          id?: string
+          name: string
+          description?: string | null
+          group_id: string
+          created_at?: string
         }
         Update: {
-          id?: string;
-          name?: string;
-          description?: string | null;
-          group_id?: string;
-          created_at?: string;
+          id?: string
+          name?: string
+          description?: string | null
+          group_id?: string
+          created_at?: string
         }
         Relationships: [
           {
