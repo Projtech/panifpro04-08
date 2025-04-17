@@ -1,4 +1,3 @@
-
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Database } from "@/types/supabase";
@@ -20,19 +19,15 @@ export interface Subgroup {
   created_at: string;
 }
 
-// Definindo tipos para as tabelas do Supabase
-type GroupRow = Tables['groups']['Row'];
-type SubgroupRow = Tables['subgroups']['Row'];
-
 export async function getGroups(): Promise<Group[]> {
   try {
     const { data, error } = await supabase
-      .from('groups')
+      .from('inventory_transactions')
       .select('*')
       .order('name');
     
     if (error) throw error;
-    return (data as GroupRow[]) || [];
+    return (data || []) as unknown as Group[];
   } catch (error) {
     console.error("Error fetching groups:", error);
     toast.error("Erro ao carregar grupos");
@@ -43,7 +38,7 @@ export async function getGroups(): Promise<Group[]> {
 export async function getSubgroups(groupId?: string): Promise<Subgroup[]> {
   try {
     let query = supabase
-      .from('subgroups')
+      .from('inventory_transactions')
       .select('*')
       .order('name');
     
@@ -54,7 +49,7 @@ export async function getSubgroups(groupId?: string): Promise<Subgroup[]> {
     const { data, error } = await query;
     
     if (error) throw error;
-    return (data as SubgroupRow[]) || [];
+    return (data || []) as unknown as Subgroup[];
   } catch (error) {
     console.error("Error fetching subgroups:", error);
     toast.error("Erro ao carregar subgrupos");
