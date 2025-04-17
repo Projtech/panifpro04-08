@@ -1,9 +1,9 @@
+
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Database } from "@/types/supabase";
 
 type Tables = Database['public']['Tables'];
-
 
 export interface Group {
   id: string;
@@ -24,16 +24,15 @@ export interface Subgroup {
 type GroupRow = Tables['groups']['Row'];
 type SubgroupRow = Tables['subgroups']['Row'];
 
-
 export async function getGroups(): Promise<Group[]> {
   try {
     const { data, error } = await supabase
       .from('groups')
       .select('*')
-      .order('name') as { data: GroupRow[] | null, error: any };
+      .order('name');
     
     if (error) throw error;
-    return data || [];
+    return (data as GroupRow[]) || [];
   } catch (error) {
     console.error("Error fetching groups:", error);
     toast.error("Erro ao carregar grupos");
@@ -52,10 +51,10 @@ export async function getSubgroups(groupId?: string): Promise<Subgroup[]> {
       query = query.eq('group_id', groupId);
     }
     
-    const { data, error } = await query as { data: SubgroupRow[] | null, error: any };
+    const { data, error } = await query;
     
     if (error) throw error;
-    return data || [];
+    return (data as SubgroupRow[]) || [];
   } catch (error) {
     console.error("Error fetching subgroups:", error);
     toast.error("Erro ao carregar subgrupos");
@@ -69,11 +68,11 @@ export async function createGroup(group: Omit<Group, 'id' | 'created_at'>): Prom
       .from('groups')
       .insert([group])
       .select()
-      .single() as { data: GroupRow | null, error: any };
+      .single();
     
     if (error) throw error;
     toast.success("Grupo criado com sucesso");
-    return data;
+    return data as GroupRow;
   } catch (error) {
     console.error("Error creating group:", error);
     toast.error("Erro ao criar grupo");
@@ -86,7 +85,7 @@ export async function updateGroup(id: string, group: Partial<Omit<Group, 'id' | 
     const { error } = await supabase
       .from('groups')
       .update(group)
-      .eq('id', id) as { error: any };
+      .eq('id', id);
     
     if (error) throw error;
     toast.success("Grupo atualizado com sucesso");
@@ -104,7 +103,7 @@ export async function deleteGroup(id: string): Promise<boolean> {
     const { data: subgroups } = await supabase
       .from('subgroups')
       .select('id')
-      .eq('group_id', id) as { data: Pick<SubgroupRow, 'id'>[] | null, error: any };
+      .eq('group_id', id);
     
     if (subgroups && subgroups.length > 0) {
       toast.error("Não é possível excluir um grupo que possui subgrupos");
@@ -115,7 +114,7 @@ export async function deleteGroup(id: string): Promise<boolean> {
     const { data: products } = await supabase
       .from('products')
       .select('id')
-      .eq('group_id', id) as { data: { id: string }[] | null, error: any };
+      .eq('group_id', id);
     
     if (products && products.length > 0) {
       toast.error("Não é possível excluir um grupo que possui produtos vinculados");
@@ -125,7 +124,7 @@ export async function deleteGroup(id: string): Promise<boolean> {
     const { error } = await supabase
       .from('groups')
       .delete()
-      .eq('id', id) as { error: any };
+      .eq('id', id);
     
     if (error) throw error;
     toast.success("Grupo excluído com sucesso");
@@ -143,11 +142,11 @@ export async function createSubgroup(subgroup: Omit<Subgroup, 'id' | 'created_at
       .from('subgroups')
       .insert([subgroup])
       .select()
-      .single() as { data: SubgroupRow | null, error: any };
+      .single();
     
     if (error) throw error;
     toast.success("Subgrupo criado com sucesso");
-    return data;
+    return data as SubgroupRow;
   } catch (error) {
     console.error("Error creating subgroup:", error);
     toast.error("Erro ao criar subgrupo");
@@ -160,7 +159,7 @@ export async function updateSubgroup(id: string, subgroup: Partial<Omit<Subgroup
     const { error } = await supabase
       .from('subgroups')
       .update(subgroup)
-      .eq('id', id) as { error: any };
+      .eq('id', id);
     
     if (error) throw error;
     toast.success("Subgrupo atualizado com sucesso");
@@ -178,7 +177,7 @@ export async function deleteSubgroup(id: string): Promise<boolean> {
     const { data: products } = await supabase
       .from('products')
       .select('id')
-      .eq('subgroup_id', id) as { data: { id: string }[] | null, error: any };
+      .eq('subgroup_id', id);
     
     if (products && products.length > 0) {
       toast.error("Não é possível excluir um subgrupo que possui produtos vinculados");
@@ -188,7 +187,7 @@ export async function deleteSubgroup(id: string): Promise<boolean> {
     const { error } = await supabase
       .from('subgroups')
       .delete()
-      .eq('id', id) as { error: any };
+      .eq('id', id);
     
     if (error) throw error;
     toast.success("Subgrupo excluído com sucesso");

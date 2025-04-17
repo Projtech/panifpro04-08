@@ -46,30 +46,25 @@ const ProductionCalendar = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   
-  // Função para obter os dias da semana atual
   const weekDays = eachDayOfInterval({
     start: startOfWeek(currentWeek, { weekStartsOn: 0 }),
     end: endOfWeek(currentWeek, { weekStartsOn: 0 })
   });
   
-  // Função para carregar os dados
   const loadData = async () => {
     setLoading(true);
     try {
-      // Carregar pedidos de produção
       const orders = await getProductionOrders();
       
-      // Carregar receitas
       const recipesData = await getRecipes();
       setRecipes(recipesData);
       
-      // Transformar pedidos em eventos para o calendário
       const productionEvents = orders.map(order => {
         const orderRecipes = order.items.map(item => {
           const recipe = recipesData.find(r => r.id === item.recipe_id);
           return {
             name: recipe?.name || "Receita desconhecida",
-            quantity: item.quantity,
+            quantity: item.planned_quantity_kg,
             unit: item.unit
           };
         });
@@ -97,11 +92,9 @@ const ProductionCalendar = () => {
     }
   };
   
-  // Carregar dados ao iniciar
   useEffect(() => {
     loadData();
     
-    // Configurar atualização automática a cada 5 minutos
     const interval = setInterval(() => {
       loadData();
     }, 5 * 60 * 1000);
@@ -109,17 +102,14 @@ const ProductionCalendar = () => {
     return () => clearInterval(interval);
   }, []);
   
-  // Função para navegar para a semana anterior
   const previousWeek = () => {
     setCurrentWeek(subWeeks(currentWeek, 1));
   };
   
-  // Função para navegar para a próxima semana
   const nextWeek = () => {
     setCurrentWeek(addWeeks(currentWeek, 1));
   };
   
-  // Função para obter eventos de um dia específico
   const getEventsForDay = (day: Date) => {
     return events.filter(event => {
       const eventDate = new Date(event.date);
@@ -127,12 +117,10 @@ const ProductionCalendar = () => {
     });
   };
   
-  // Função para navegar para o formulário de novo pedido
   const handleNewOrder = () => {
     navigate("/production-orders/new");
   };
   
-  // Função para visualizar um pedido
   const handleViewOrder = (id: string) => {
     navigate(`/production-orders/${id}`);
   };
