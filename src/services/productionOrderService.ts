@@ -173,28 +173,60 @@ export async function createProductionOrderFromCalendar(
     // Gera número do pedido usando a data
     const orderNumber = `P${date.replace(/[^0-9]/g, '')}-${String(new Date().getTime()).slice(-3)}`;
     
-    // Cria o pedido usando a função existente
-    const order = await createProductionOrder(
-      {
+    // Cria o pedido base
+    const { data: orderData, error: orderError } = await supabase
+      .from('production_orders')
+      .insert([{
         order_number: orderNumber,
         date: date,
-        status: 'pending'
-      },
-      items.map(item => ({
+        status: 'pending' as OrderStatus,
+        adjust_materials: true // Indica que este pedido veio do calendário
+      }])
+      .select()
+      .single();
+    
+    if (orderError) throw orderError;
+    
+    if (orderData && items.length > 0) {
+      // Prepara os itens do pedido
+      const orderItems = items.map(item => ({
+        order_id: orderData.id,
         recipe_id: item.recipe_id,
         recipe_name: item.recipe_name,
-        planned_quantity_kg: item.planned_quantity_kg,
-        planned_quantity_units: item.planned_quantity_units,
+        planned_quantity_kg: item.unit === 'kg' ? item.planned_quantity_kg : 0,
+        planned_quantity_units: item.unit === 'un' ? item.planned_quantity_units : null,
         actual_quantity_kg: null,
         actual_quantity_units: null,
         unit: item.unit
-      }))
-    );
+      }));
+      
+      // Insere os itens
+      const { error: itemsError } = await supabase
+        .from('production_order_items')
+        .insert(orderItems);
+      
+      if (itemsError) throw itemsError;
+    }
     
-    if (!order) throw new Error('Erro ao criar pedido de produção');
+    // Busca o pedido completo com os itens
+    const { data: fullOrder, error: fullOrderError } = await supabase
+      .from('production_orders')
+      .select(`
+        *,
+        items:production_order_items(*)
+      `)
+      .eq('id', orderData.id)
+      .single();
+    
+    if (fullOrderError) throw fullOrderError;
     
     toast.success("Pedido de produção criado com sucesso a partir do calendário");
-    return order;
+    
+    return fullOrder ? {
+      ...fullOrder,
+      status: fullOrder.status as OrderStatus,
+      items: fullOrder.items || []
+    } as ProductionOrderWithItems : null;
   } catch (error) {
     console.error("Erro ao criar pedido a partir do calendário:", error);
     toast.error("Erro ao criar pedido de produção");
