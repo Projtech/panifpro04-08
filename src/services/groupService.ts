@@ -1,8 +1,9 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { Database } from "@/types/supabase";
 
-// Definir interfaces corretas para garantir tipagem
+// Updated interfaces to match Supabase table structure
 export interface Group {
   id: string;
   name: string;
@@ -27,10 +28,9 @@ const handleError = (error: any, message: string) => {
 
 export async function getGroups(): Promise<Group[]> {
   try {
-    // Usar uma query raw para garantir compatibilidade
     const { data, error } = await supabase
       .from('groups')
-      .select('*');
+      .select('id, name, description, created_at');
     
     if (error) throw error;
     
@@ -44,8 +44,9 @@ export async function getGroups(): Promise<Group[]> {
 
 export async function getSubgroups(groupId?: string): Promise<Subgroup[]> {
   try {
-    // Usar uma query raw para garantir compatibilidade
-    let query = supabase.from('subgroups').select('*');
+    let query = supabase
+      .from('subgroups')
+      .select('id, name, description, group_id, created_at');
     
     if (groupId) {
       query = query.eq('group_id', groupId);
@@ -67,7 +68,7 @@ export async function createGroup(groupData: Omit<Group, 'id' | 'created_at'>): 
   try {
     const { data, error } = await supabase
       .from('groups')
-      .insert(groupData)
+      .insert([groupData])
       .select()
       .single();
     
@@ -131,7 +132,7 @@ export async function createSubgroup(subgroupData: Omit<Subgroup, 'id' | 'create
   try {
     const { data, error } = await supabase
       .from('subgroups')
-      .insert(subgroupData)
+      .insert([subgroupData])
       .select()
       .single();
     
