@@ -1,6 +1,5 @@
-
 import { useState, useEffect } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,7 +27,8 @@ import {
   List,
   AlertTriangle,
   Loader2,
-  CheckCircle
+  CheckCircle,
+  Calendar
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -44,6 +44,7 @@ import {
 } from "@/services/recipeService";
 import {
   createProductionOrder,
+  createProductionOrderFromCalendar,
   getProductionOrder,
   updateProductionOrderStatus,
   ProductionOrderItem
@@ -56,6 +57,7 @@ interface OrderRecipe {
   quantity: number;
   unit: 'kg' | 'un';
   convertedQuantity: number;
+  fromCalendar?: boolean;
 }
 
 interface MaterialItem {
@@ -65,8 +67,22 @@ interface MaterialItem {
   unit: string;
 }
 
+interface LocationState {
+  calendarItems?: Array<{
+    recipe_id: string | null;
+    recipe_name: string;
+    planned_quantity_kg: number;
+    planned_quantity_units: number | null;
+    unit: string;
+  }>;
+  calendarDate?: string;
+}
+
 export default function ProductionOrderForm() {
   const { id } = useParams();
+  const location = useLocation();
+  const state = location.state as LocationState;
+  
   const [loading, setLoading] = useState(false);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   
@@ -75,8 +91,8 @@ export default function ProductionOrderForm() {
   const [orderStatus, setOrderStatus] = useState<'pending' | 'in_progress' | 'completed'>('pending');
   const [orderRecipes, setOrderRecipes] = useState<OrderRecipe[]>([]);
   const [showMaterialsList, setShowMaterialsList] = useState(false);
+  const [isFromCalendar, setIsFromCalendar] = useState(false);
   
-  // New recipe being added
   const [newRecipeId, setNewRecipeId] = useState('');
   const [newRecipeQuantity, setNewRecipeQuantity] = useState('');
   const [newRecipeUnit, setNewRecipeUnit] = useState<'kg' | 'un'>('kg');
@@ -84,7 +100,6 @@ export default function ProductionOrderForm() {
   const navigate = useNavigate();
   const { toast } = useToast();
   
-  // Load recipes
   useEffect(() => {
     const loadRecipes = async () => {
       setLoading(true);
@@ -96,7 +111,45 @@ export default function ProductionOrderForm() {
     loadRecipes();
   }, []);
   
-  // Load production order if editing
+  useEffect(() => {
+    if (state?.calendarItems && state.calendarItems.length > 0 && state.calendarDate) {
+      setIsFromCalendar(true);
+      
+      if (state.calendarDate) {
+        setOrderDate(state.calendarDate);
+      }
+      
+      if (recipes.length > 0) {
+        const recipesFromCalendar: OrderRecipe[] = state.calendarItems.map(item => {
+          const recipe = recipes.find(r => r.id === item.recipe_id);
+          let convertedQuantity = 0;
+          
+          if (recipe) {
+            convertedQuantity = item.unit === 'kg'
+              ? (recipe.yield_units && recipe.yield_units > 0) 
+                ? item.planned_quantity_kg * (recipe.yield_units / recipe.yield_kg) 
+                : 0
+              : item.planned_quantity_units 
+                ? item.planned_quantity_units * (recipe.yield_kg / (recipe.yield_units || 1))
+                : 0;
+          }
+          
+          return {
+            id: `cal-recipe-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+            recipeId: item.recipe_id,
+            recipeName: item.recipe_name,
+            quantity: item.unit === 'kg' ? item.planned_quantity_kg : (item.planned_quantity_units || 0),
+            unit: item.unit as 'kg' | 'un',
+            convertedQuantity,
+            fromCalendar: true
+          };
+        });
+        
+        setOrderRecipes(recipesFromCalendar);
+      }
+    }
+  }, [state, recipes]);
+  
   useEffect(() => {
     const loadProductionOrder = async () => {
       if (!id) return;
@@ -108,8 +161,8 @@ export default function ProductionOrderForm() {
         setOrderNumber(order.order_number);
         setOrderDate(order.date);
         setOrderStatus(order.status as 'pending' | 'in_progress' | 'completed');
+        setIsFromCalendar(!!order.adjust_materials);
         
-        // Convert items to orderRecipes format
         const convertedItems = order.items.map(item => {
           const recipe = recipes.find(r => r.id === item.recipe_id);
           let convertedQuantity = 0;
@@ -130,7 +183,8 @@ export default function ProductionOrderForm() {
             recipeName: item.recipe_name,
             quantity: item.unit === 'kg' ? item.planned_quantity_kg : (item.planned_quantity_units || 0),
             unit: item.unit as 'kg' | 'un',
-            convertedQuantity
+            convertedQuantity,
+            fromCalendar: !!order.adjust_materials
           };
         });
         
@@ -147,7 +201,6 @@ export default function ProductionOrderForm() {
     }
   }, [id, recipes, navigate]);
   
-  // Calculate consolidated materials list for the whole order
   const [materials, setMaterials] = useState<MaterialItem[]>([]);
   const [loadingMaterials, setLoadingMaterials] = useState(false);
   
@@ -157,34 +210,27 @@ export default function ProductionOrderForm() {
     let materialId = 1;
     
     try {
-      // Para cada receita no pedido
       for (const orderRecipe of orderRecipes) {
         const recipe = recipes.find(r => r.id === orderRecipe.recipeId);
         
         if (recipe) {
           console.log(`Calculando materiais para ${recipe.name} (${orderRecipe.quantity} ${orderRecipe.unit})`);
           
-          // Calcula a quantidade em kg para esta receita
           let quantityInKg = orderRecipe.quantity;
           if (orderRecipe.unit === 'un' && recipe.yield_units && recipe.yield_units > 0) {
-            // Converte unidades para kg
             quantityInKg = orderRecipe.quantity * (recipe.yield_kg / recipe.yield_units);
           }
           
-          // Busca todos os ingredientes da receita, incluindo sub-receitas
           const ingredients = await getAllRecipeIngredients(recipe.id, quantityInKg);
           
-          // Adiciona cada ingrediente ao mapa de materiais
           for (const ingredient of ingredients) {
             if (ingredient.product_id && ingredient.product) {
               const key = `${ingredient.product_id}-${ingredient.unit}`;
               
               if (materialsMap.has(key)) {
-                // Se o material já existe, soma a quantidade
                 const existingMaterial = materialsMap.get(key)!;
                 existingMaterial.totalQuantity += ingredient.quantity;
               } else {
-                // Se o material não existe, adiciona ao mapa
                 materialsMap.set(key, {
                   id: materialId++,
                   name: ingredient.product.name,
@@ -197,7 +243,6 @@ export default function ProductionOrderForm() {
         }
       }
       
-      // Converte o mapa em array e ordena por nome
       const materialsList = Array.from(materialsMap.values())
         .sort((a, b) => a.name.localeCompare(b.name));
       
@@ -213,8 +258,6 @@ export default function ProductionOrderForm() {
       setLoadingMaterials(false);
     }
   };
-  
-  // Removido: const materials = calculateMaterials();
   
   const handleAddRecipe = () => {
     if (!newRecipeId || !newRecipeQuantity) {
@@ -239,7 +282,6 @@ export default function ProductionOrderForm() {
     
     const quantity = parseFloat(newRecipeQuantity);
     
-    // Calculate the converted quantity (if kg entered, calculate units and vice versa)
     const convertedQuantity = newRecipeUnit === 'kg' 
       ? (recipe.yield_units && recipe.yield_units > 0) 
         ? quantity * (recipe.yield_units / recipe.yield_kg) 
@@ -252,7 +294,8 @@ export default function ProductionOrderForm() {
       recipeName: recipe.name,
       quantity,
       unit: newRecipeUnit,
-      convertedQuantity
+      convertedQuantity,
+      fromCalendar: false
     };
     
     setOrderRecipes([...orderRecipes, newOrderRecipe]);
@@ -277,30 +320,53 @@ export default function ProductionOrderForm() {
     
     setLoading(true);
     
-    // Convert orderRecipes to ProductionOrderItem format
-    const items: Omit<ProductionOrderItem, 'id' | 'order_id'>[] = orderRecipes.map(recipe => ({
-      recipe_id: recipe.recipeId,
-      recipe_name: recipe.recipeName,
-      planned_quantity_kg: recipe.unit === 'kg' ? recipe.quantity : recipe.convertedQuantity,
-      planned_quantity_units: recipe.unit === 'un' ? Math.round(recipe.quantity) : Math.round(recipe.convertedQuantity),
-      actual_quantity_kg: null,
-      actual_quantity_units: null,
-      unit: recipe.unit
-    }));
-    
-    const success = await createProductionOrder(
-      {
-        order_number: orderNumber,
-        date: orderDate,
-        status: 'pending'
-      },
-      items
-    );
-    
-    setLoading(false);
-    
-    if (success) {
-      navigate('/production-orders');
+    try {
+      let success;
+      
+      if (isFromCalendar && state?.calendarItems && !id) {
+        const items = state.calendarItems.map(item => ({
+          recipe_id: item.recipe_id,
+          recipe_name: item.recipe_name,
+          planned_quantity_kg: item.planned_quantity_kg,
+          planned_quantity_units: item.planned_quantity_units,
+          unit: item.unit
+        }));
+        
+        success = await createProductionOrderFromCalendar(orderDate, items);
+      } else {
+        const items: Omit<ProductionOrderItem, 'id' | 'order_id'>[] = orderRecipes.map(recipe => ({
+          recipe_id: recipe.recipeId,
+          recipe_name: recipe.recipeName,
+          planned_quantity_kg: recipe.unit === 'kg' ? recipe.quantity : recipe.convertedQuantity,
+          planned_quantity_units: recipe.unit === 'un' ? Math.round(recipe.quantity) : Math.round(recipe.convertedQuantity),
+          actual_quantity_kg: null,
+          actual_quantity_units: null,
+          unit: recipe.unit
+        }));
+        
+        success = await createProductionOrder(
+          {
+            order_number: orderNumber,
+            date: orderDate,
+            status: 'pending',
+            adjust_materials: isFromCalendar
+          },
+          items
+        );
+      }
+      
+      if (success) {
+        navigate('/production-orders');
+      }
+    } catch (error) {
+      console.error("Erro ao salvar pedido:", error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível salvar o pedido de produção.",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
     }
   };
   
@@ -332,7 +398,6 @@ export default function ProductionOrderForm() {
       return;
     }
     
-    // Calcula a lista de materiais antes de abrir o diálogo
     await calculateMaterials();
     setShowMaterialsList(true);
   };
@@ -353,7 +418,7 @@ export default function ProductionOrderForm() {
           Voltar
         </Button>
         
-        <div>
+        <div className="flex-1">
           <h1 className="text-2xl font-bold text-bakery-brown">
             {isEditing ? 'Detalhes do Pedido' : 'Novo Pedido de Produção'}
           </h1>
@@ -364,6 +429,13 @@ export default function ProductionOrderForm() {
             }
           </p>
         </div>
+        
+        {isFromCalendar && (
+          <div className="flex items-center text-bakery-amber bg-amber-50 px-3 py-1 rounded-lg border border-amber-200">
+            <Calendar className="h-4 w-4 mr-2" />
+            <span className="text-sm font-medium">Pedido do Calendário</span>
+          </div>
+        )}
       </div>
       
       {loading && (
@@ -498,8 +570,18 @@ export default function ProductionOrderForm() {
                     <TableBody>
                       {orderRecipes.length > 0 ? (
                         orderRecipes.map((orderRecipe) => (
-                          <TableRow key={orderRecipe.id}>
-                            <TableCell className="font-medium">{orderRecipe.recipeName}</TableCell>
+                          <TableRow 
+                            key={orderRecipe.id}
+                            className={orderRecipe.fromCalendar ? "bg-amber-50" : ""}
+                          >
+                            <TableCell className="font-medium">
+                              {orderRecipe.fromCalendar && (
+                                <span className="inline-block bg-amber-100 text-amber-800 text-xs px-2 py-1 rounded mr-2">
+                                  Calendário
+                                </span>
+                              )}
+                              {orderRecipe.recipeName}
+                            </TableCell>
                             <TableCell>
                               {orderRecipe.unit === 'kg' 
                                 ? <span className="font-semibold">{orderRecipe.quantity.toFixed(2)} kg</span>
@@ -664,16 +746,16 @@ export default function ProductionOrderForm() {
             )}
           </div>
             
-            <div className="mt-4 flex justify-end">
-              <Button 
-                onClick={() => setShowMaterialsList(false)} 
-                className="bg-bakery-amber hover:bg-bakery-amber/90 text-white"
-              >
-                Fechar
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+          <div className="mt-4 flex justify-end">
+            <Button 
+              onClick={() => setShowMaterialsList(false)} 
+              className="bg-bakery-amber hover:bg-bakery-amber/90 text-white"
+            >
+              Fechar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
