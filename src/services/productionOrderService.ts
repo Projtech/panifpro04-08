@@ -1,4 +1,3 @@
-
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -155,6 +154,49 @@ export async function createProductionOrder(
     } as ProductionOrderWithItems : null;
   } catch (error) {
     console.error("Error creating production order:", error);
+    toast.error("Erro ao criar pedido de produção");
+    return null;
+  }
+}
+
+export async function createProductionOrderFromCalendar(
+  date: string,
+  items: Array<{
+    recipe_id: string | null;
+    recipe_name: string;
+    planned_quantity_kg: number;
+    planned_quantity_units: number | null;
+    unit: string;
+  }>
+): Promise<ProductionOrderWithItems | null> {
+  try {
+    // Gera número do pedido usando a data
+    const orderNumber = `P${date.replace(/[^0-9]/g, '')}-${String(new Date().getTime()).slice(-3)}`;
+    
+    // Cria o pedido usando a função existente
+    const order = await createProductionOrder(
+      {
+        order_number: orderNumber,
+        date: date,
+        status: 'pending'
+      },
+      items.map(item => ({
+        recipe_id: item.recipe_id,
+        recipe_name: item.recipe_name,
+        planned_quantity_kg: item.planned_quantity_kg,
+        planned_quantity_units: item.planned_quantity_units,
+        actual_quantity_kg: null,
+        actual_quantity_units: null,
+        unit: item.unit
+      }))
+    );
+    
+    if (!order) throw new Error('Erro ao criar pedido de produção');
+    
+    toast.success("Pedido de produção criado com sucesso a partir do calendário");
+    return order;
+  } catch (error) {
+    console.error("Erro ao criar pedido a partir do calendário:", error);
     toast.error("Erro ao criar pedido de produção");
     return null;
   }
