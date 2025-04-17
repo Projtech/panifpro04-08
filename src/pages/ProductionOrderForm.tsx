@@ -111,96 +111,6 @@ export default function ProductionOrderForm() {
     loadRecipes();
   }, []);
   
-  useEffect(() => {
-    if (state?.calendarItems && state.calendarItems.length > 0 && state.calendarDate) {
-      setIsFromCalendar(true);
-      
-      if (state.calendarDate) {
-        setOrderDate(state.calendarDate);
-      }
-      
-      if (recipes.length > 0) {
-        const recipesFromCalendar: OrderRecipe[] = state.calendarItems.map(item => {
-          const recipe = recipes.find(r => r.id === item.recipe_id);
-          let convertedQuantity = 0;
-          
-          if (recipe) {
-            convertedQuantity = item.unit === 'kg'
-              ? (recipe.yield_units && recipe.yield_units > 0) 
-                ? item.planned_quantity_kg * (recipe.yield_units / recipe.yield_kg) 
-                : 0
-              : item.planned_quantity_units 
-                ? item.planned_quantity_units * (recipe.yield_kg / (recipe.yield_units || 1))
-                : 0;
-          }
-          
-          return {
-            id: `cal-recipe-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-            recipeId: item.recipe_id,
-            recipeName: item.recipe_name,
-            quantity: item.unit === 'kg' ? item.planned_quantity_kg : (item.planned_quantity_units || 0),
-            unit: item.unit as 'kg' | 'un',
-            convertedQuantity,
-            fromCalendar: true
-          };
-        });
-        
-        setOrderRecipes(recipesFromCalendar);
-      }
-    }
-  }, [state, recipes]);
-  
-  useEffect(() => {
-    const loadProductionOrder = async () => {
-      if (!id) return;
-      
-      setLoading(true);
-      const order = await getProductionOrder(id);
-      
-      if (order) {
-        setOrderNumber(order.order_number);
-        setOrderDate(order.date);
-        setOrderStatus(order.status as 'pending' | 'in_progress' | 'completed');
-        setIsFromCalendar(!!order.adjust_materials);
-        
-        const convertedItems = order.items.map(item => {
-          const recipe = recipes.find(r => r.id === item.recipe_id);
-          let convertedQuantity = 0;
-          
-          if (recipe) {
-            convertedQuantity = item.unit === 'kg'
-              ? (recipe.yield_units && recipe.yield_units > 0) 
-                ? item.planned_quantity_kg * (recipe.yield_units / recipe.yield_kg) 
-                : 0
-              : item.planned_quantity_units 
-                ? item.planned_quantity_units * (recipe.yield_kg / (recipe.yield_units || 1))
-                : 0;
-          }
-          
-          return {
-            id: item.id,
-            recipeId: item.recipe_id,
-            recipeName: item.recipe_name,
-            quantity: item.unit === 'kg' ? item.planned_quantity_kg : (item.planned_quantity_units || 0),
-            unit: item.unit as 'kg' | 'un',
-            convertedQuantity,
-            fromCalendar: !!order.adjust_materials
-          };
-        });
-        
-        setOrderRecipes(convertedItems);
-      } else {
-        navigate('/production-orders');
-      }
-      
-      setLoading(false);
-    };
-    
-    if (recipes.length > 0) {
-      loadProductionOrder();
-    }
-  }, [id, recipes, navigate]);
-  
   const [materials, setMaterials] = useState<MaterialItem[]>([]);
   const [loadingMaterials, setLoadingMaterials] = useState(false);
   
@@ -308,6 +218,71 @@ export default function ProductionOrderForm() {
     setOrderRecipes(orderRecipes.filter(recipe => recipe.id !== id));
   };
   
+  const openMaterialsList = async () => {
+    if (orderRecipes.length === 0) {
+      toast({
+        title: "Sem receitas",
+        description: "Adicione receitas ao pedido para visualizar a lista de materiais.",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    await calculateMaterials();
+    setShowMaterialsList(true);
+  };
+  
+  const isEditing = !!id;
+  const isViewOnly = isEditing && orderStatus === 'completed';
+
+  // Novo estado para rastrear origem do pedido
+  const [orderOrigin, setOrderOrigin] = useState<'manual' | 'calendar'>('manual');
+
+  useEffect(() => {
+    // Detectar se a navegação veio do calendário
+    if (state?.calendarItems && state.calendarItems.length > 0) {
+      setOrderOrigin('calendar');
+      
+      if (state.calendarDate) {
+        setOrderDate(state.calendarDate);
+      }
+      
+      // Carregar produtos do calendário apenas se receitas já estiverem carregadas
+      if (recipes.length > 0) {
+        const calendarRecipes: OrderRecipe[] = state.calendarItems.map(item => {
+          const recipe = recipes.find(r => r.id === item.recipe_id);
+          let convertedQuantity = calculateConvertedQuantity(item, recipe);
+          
+          return {
+            id: `cal-recipe-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+            recipeId: item.recipe_id,
+            recipeName: item.recipe_name,
+            quantity: item.unit === 'kg' ? item.planned_quantity_kg : (item.planned_quantity_units || 0),
+            unit: item.unit as 'kg' | 'un',
+            convertedQuantity,
+            fromCalendar: true
+          };
+        });
+        
+        setOrderRecipes(calendarRecipes);
+      }
+    }
+  }, [state, recipes]);
+
+  // Função auxiliar para cálculo de conversão de quantidade
+  const calculateConvertedQuantity = (item: any, recipe?: Recipe) => {
+    if (!recipe) return 0;
+
+    return item.unit === 'kg' 
+      ? (recipe.yield_units && recipe.yield_units > 0) 
+        ? item.planned_quantity_kg * (recipe.yield_units / recipe.yield_kg) 
+        : 0
+      : item.planned_quantity_units 
+        ? item.planned_quantity_units * (recipe.yield_kg / (recipe.yield_units || 1))
+        : 0;
+  };
+
+  // Modificar handleSave para distinguir origem do pedido
   const handleSave = async () => {
     if (orderRecipes.length === 0) {
       toast({
@@ -323,37 +298,25 @@ export default function ProductionOrderForm() {
     try {
       let success;
       
-      if (isFromCalendar && state?.calendarItems && !id) {
-        const items = state.calendarItems.map(item => ({
-          recipe_id: item.recipe_id,
-          recipe_name: item.recipe_name,
-          planned_quantity_kg: item.planned_quantity_kg,
-          planned_quantity_units: item.planned_quantity_units,
-          unit: item.unit
-        }));
-        
-        success = await createProductionOrderFromCalendar(orderDate, items);
-      } else {
-        const items: Omit<ProductionOrderItem, 'id' | 'order_id'>[] = orderRecipes.map(recipe => ({
-          recipe_id: recipe.recipeId,
-          recipe_name: recipe.recipeName,
-          planned_quantity_kg: recipe.unit === 'kg' ? recipe.quantity : recipe.convertedQuantity,
-          planned_quantity_units: recipe.unit === 'un' ? Math.round(recipe.quantity) : Math.round(recipe.convertedQuantity),
-          actual_quantity_kg: null,
-          actual_quantity_units: null,
-          unit: recipe.unit
-        }));
-        
-        success = await createProductionOrder(
-          {
-            order_number: orderNumber,
-            date: orderDate,
-            status: 'pending',
-            adjust_materials: isFromCalendar
-          },
-          items
-        );
-      }
+      const items = orderRecipes.map(recipe => ({
+        recipe_id: recipe.recipeId,
+        recipe_name: recipe.recipeName,
+        planned_quantity_kg: recipe.unit === 'kg' ? recipe.quantity : recipe.convertedQuantity,
+        planned_quantity_units: recipe.unit === 'un' ? Math.round(recipe.quantity) : Math.round(recipe.convertedQuantity),
+        actual_quantity_kg: null,
+        actual_quantity_units: null,
+        unit: recipe.unit
+      }));
+      
+      success = await createProductionOrder(
+        {
+          order_number: orderNumber,
+          date: orderDate,
+          status: 'pending',
+          adjust_materials: orderOrigin === 'calendar'  // Flag para identificar origem
+        },
+        items
+      );
       
       if (success) {
         navigate('/production-orders');
@@ -387,21 +350,7 @@ export default function ProductionOrderForm() {
     
     setLoading(false);
   };
-  
-  const openMaterialsList = async () => {
-    if (orderRecipes.length === 0) {
-      toast({
-        title: "Sem receitas",
-        description: "Adicione receitas ao pedido para visualizar a lista de materiais.",
-        variant: "destructive"
-      });
-      return;
-    }
-    
-    await calculateMaterials();
-    setShowMaterialsList(true);
-  };
-  
+
   const isEditing = !!id;
   const isViewOnly = isEditing && orderStatus === 'completed';
 
@@ -572,7 +521,7 @@ export default function ProductionOrderForm() {
                         orderRecipes.map((orderRecipe) => (
                           <TableRow 
                             key={orderRecipe.id}
-                            className={orderRecipe.fromCalendar ? "bg-amber-50" : ""}
+                            className={orderRecipe.fromCalendar ? "bg-amber-50 border-l-4 border-amber-500" : ""}
                           >
                             <TableCell className="font-medium">
                               {orderRecipe.fromCalendar && (
