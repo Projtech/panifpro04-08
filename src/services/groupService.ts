@@ -14,6 +14,15 @@ export interface Subgroup extends Omit<Group, 'id'> {
   group_id: string;
 }
 
+export interface GroupData {
+  name: string;
+  description: string | null;
+}
+
+export interface SubgroupData extends GroupData {
+  group_id: string;
+}
+
 export async function getGroups(): Promise<Group[]> {
   try {
     const { data, error } = await supabase
@@ -55,11 +64,11 @@ export async function getSubgroups(groupId?: string): Promise<Subgroup[]> {
   }
 }
 
-export async function createGroup(name: string, description?: string): Promise<Group | null> {
+export async function createGroup(groupData: GroupData): Promise<Group | null> {
   try {
     const { data, error } = await supabase
       .from('groups')
-      .insert([{ name, description }])
+      .insert([groupData])
       .select()
       .single();
     
@@ -74,11 +83,11 @@ export async function createGroup(name: string, description?: string): Promise<G
   }
 }
 
-export async function updateGroup(id: string, name: string, description?: string): Promise<Group | null> {
+export async function updateGroup(id: string, groupData: GroupData): Promise<Group | null> {
   try {
     const { data, error } = await supabase
       .from('groups')
-      .update({ name, description })
+      .update(groupData)
       .eq('id', id)
       .select()
       .single();
@@ -121,11 +130,11 @@ export async function deleteGroup(id: string): Promise<boolean> {
   }
 }
 
-export async function createSubgroup(name: string, groupId: string, description?: string): Promise<Subgroup | null> {
+export async function createSubgroup(subgroupData: SubgroupData): Promise<Subgroup | null> {
   try {
     const { data, error } = await supabase
       .from('subgroups')
-      .insert([{ name, group_id: groupId, description }])
+      .insert([subgroupData])
       .select()
       .single();
     
@@ -140,11 +149,11 @@ export async function createSubgroup(name: string, groupId: string, description?
   }
 }
 
-export async function updateSubgroup(id: string, name: string, description?: string): Promise<Subgroup | null> {
+export async function updateSubgroup(id: string, subgroupData: Omit<SubgroupData, 'group_id'>): Promise<Subgroup | null> {
   try {
     const { data, error } = await supabase
       .from('subgroups')
-      .update({ name, description })
+      .update(subgroupData)
       .eq('id', id)
       .select()
       .single();
