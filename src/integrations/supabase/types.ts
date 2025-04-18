@@ -9,6 +9,27 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      groups: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
       inventory_transactions: {
         Row: {
           cost: number | null
@@ -65,6 +86,75 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      production_list_items: {
+        Row: {
+          created_at: string
+          id: string
+          list_id: string
+          product_id: string
+          quantity: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          list_id: string
+          product_id: string
+          quantity?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          list_id?: string
+          product_id?: string
+          quantity?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "production_list_items_list_id_fkey"
+            columns: ["list_id"]
+            isOneToOne: false
+            referencedRelation: "production_lists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "production_list_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      production_lists: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       production_order_items: {
         Row: {
@@ -146,50 +236,100 @@ export type Database = {
       }
       products: {
         Row: {
+          all_days: boolean | null
           code: string | null
           cost: number
           current_stock: number | null
+          friday: boolean | null
+          group_id: string | null
           id: string
+          kg_weight: number | null
           min_stock: number
+          monday: boolean | null
           name: string
           recipe_id: string | null
+          saturday: boolean | null
           sku: string | null
+          subgroup_id: string | null
+          sunday: boolean | null
           supplier: string
+          thursday: boolean | null
+          tuesday: boolean | null
           unit: string
           unit_price: number | null
+          unit_weight: number | null
+          wednesday: boolean | null
         }
         Insert: {
+          all_days?: boolean | null
           code?: string | null
           cost: number
           current_stock?: number | null
+          friday?: boolean | null
+          group_id?: string | null
           id?: string
+          kg_weight?: number | null
           min_stock: number
+          monday?: boolean | null
           name: string
           recipe_id?: string | null
+          saturday?: boolean | null
           sku?: string | null
+          subgroup_id?: string | null
+          sunday?: boolean | null
           supplier: string
+          thursday?: boolean | null
+          tuesday?: boolean | null
           unit: string
           unit_price?: number | null
+          unit_weight?: number | null
+          wednesday?: boolean | null
         }
         Update: {
+          all_days?: boolean | null
           code?: string | null
           cost?: number
           current_stock?: number | null
+          friday?: boolean | null
+          group_id?: string | null
           id?: string
+          kg_weight?: number | null
           min_stock?: number
+          monday?: boolean | null
           name?: string
           recipe_id?: string | null
+          saturday?: boolean | null
           sku?: string | null
+          subgroup_id?: string | null
+          sunday?: boolean | null
           supplier?: string
+          thursday?: boolean | null
+          tuesday?: boolean | null
           unit?: string
           unit_price?: number | null
+          unit_weight?: number | null
+          wednesday?: boolean | null
         }
         Relationships: [
+          {
+            foreignKeyName: "products_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "products_recipe_id_fkey"
             columns: ["recipe_id"]
             isOneToOne: false
             referencedRelation: "recipes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "products_subgroup_id_fkey"
+            columns: ["subgroup_id"]
+            isOneToOne: false
+            referencedRelation: "subgroups"
             referencedColumns: ["id"]
           },
         ]
@@ -254,49 +394,153 @@ export type Database = {
       }
       recipes: {
         Row: {
+          all_days: boolean | null
           code: string | null
           cost_per_kg: number | null
           cost_per_unit: number | null
+          friday: boolean | null
           gif_url: string | null
+          group_id: string | null
           id: string
           instructions: string | null
+          monday: boolean | null
           name: string
           photo_url: string | null
+          saturday: boolean | null
+          subgroup_id: string | null
+          sunday: boolean | null
+          thursday: boolean | null
+          tuesday: boolean | null
+          wednesday: boolean | null
           yield_kg: number
           yield_units: number | null
         }
         Insert: {
+          all_days?: boolean | null
           code?: string | null
           cost_per_kg?: number | null
           cost_per_unit?: number | null
+          friday?: boolean | null
           gif_url?: string | null
+          group_id?: string | null
           id?: string
           instructions?: string | null
+          monday?: boolean | null
           name: string
           photo_url?: string | null
+          saturday?: boolean | null
+          subgroup_id?: string | null
+          sunday?: boolean | null
+          thursday?: boolean | null
+          tuesday?: boolean | null
+          wednesday?: boolean | null
           yield_kg: number
           yield_units?: number | null
         }
         Update: {
+          all_days?: boolean | null
           code?: string | null
           cost_per_kg?: number | null
           cost_per_unit?: number | null
+          friday?: boolean | null
           gif_url?: string | null
+          group_id?: string | null
           id?: string
           instructions?: string | null
+          monday?: boolean | null
           name?: string
           photo_url?: string | null
+          saturday?: boolean | null
+          subgroup_id?: string | null
+          sunday?: boolean | null
+          thursday?: boolean | null
+          tuesday?: boolean | null
+          wednesday?: boolean | null
           yield_kg?: number
           yield_units?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "recipes_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recipes_subgroup_id_fkey"
+            columns: ["subgroup_id"]
+            isOneToOne: false
+            referencedRelation: "subgroups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      subgroups: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          group_id: string
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          group_id: string
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          group_id?: string
+          id?: string
+          name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subgroups_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_products_by_weekday: {
+        Args: { weekday: string }
+        Returns: {
+          all_days: boolean | null
+          code: string | null
+          cost: number
+          current_stock: number | null
+          friday: boolean | null
+          group_id: string | null
+          id: string
+          kg_weight: number | null
+          min_stock: number
+          monday: boolean | null
+          name: string
+          recipe_id: string | null
+          saturday: boolean | null
+          sku: string | null
+          subgroup_id: string | null
+          sunday: boolean | null
+          supplier: string
+          thursday: boolean | null
+          tuesday: boolean | null
+          unit: string
+          unit_price: number | null
+          unit_weight: number | null
+          wednesday: boolean | null
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
