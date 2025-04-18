@@ -1,4 +1,3 @@
-
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -105,7 +104,6 @@ export async function updateGroup(id: string, groupData: GroupData): Promise<Gro
 
 export async function deleteGroup(id: string): Promise<boolean> {
   try {
-    // First delete all subgroups
     const { error: subgroupsError } = await supabase
       .from('subgroups')
       .delete()
@@ -113,7 +111,6 @@ export async function deleteGroup(id: string): Promise<boolean> {
     
     if (subgroupsError) throw subgroupsError;
     
-    // Then delete the group
     const { error } = await supabase
       .from('groups')
       .delete()
@@ -149,7 +146,7 @@ export async function createSubgroup(subgroupData: SubgroupData): Promise<Subgro
   }
 }
 
-export async function updateSubgroup(id: string, subgroupData: Omit<SubgroupData, 'group_id'>): Promise<Subgroup | null> {
+export async function updateSubgroup(id: string, subgroupData: SubgroupData): Promise<Subgroup | null> {
   try {
     const { data, error } = await supabase
       .from('subgroups')

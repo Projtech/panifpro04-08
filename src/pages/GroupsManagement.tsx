@@ -55,14 +55,12 @@ const GroupsManagement = () => {
   const [subgroups, setSubgroups] = useState<Subgroup[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
   
-  // Dialog states
   const [showGroupDialog, setShowGroupDialog] = useState(false);
   const [showSubgroupDialog, setShowSubgroupDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleteType, setDeleteType] = useState<'group' | 'subgroup'>('group');
   const [deleteId, setDeleteId] = useState<string>('');
   
-  // Form states
   const [groupForm, setGroupForm] = useState({
     id: '',
     name: '',
@@ -79,7 +77,6 @@ const GroupsManagement = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   
-  // Carregar dados
   const loadData = async () => {
     setLoading(true);
     try {
@@ -103,12 +100,10 @@ const GroupsManagement = () => {
     loadData();
   }, []);
   
-  // Filtrar subgrupos pelo grupo selecionado
   const filteredSubgroups = selectedGroup 
     ? subgroups.filter(subgroup => subgroup.group_id === selectedGroup.id)
     : [];
   
-  // Funções para manipulação de grupos
   const handleAddGroup = () => {
     setGroupForm({
       id: '',
@@ -146,13 +141,11 @@ const GroupsManagement = () => {
     setLoading(true);
     try {
       if (groupForm.id) {
-        // Atualizar grupo existente
         await updateGroup(groupForm.id, {
           name: groupForm.name,
           description: groupForm.description || null
         });
       } else {
-        // Criar novo grupo
         await createGroup({
           name: groupForm.name,
           description: groupForm.description || null
@@ -168,7 +161,6 @@ const GroupsManagement = () => {
     }
   };
   
-  // Funções para manipulação de subgrupos
   const handleAddSubgroup = () => {
     if (!selectedGroup) {
       toast({
@@ -226,14 +218,12 @@ const GroupsManagement = () => {
     setLoading(true);
     try {
       if (subgroupForm.id) {
-        // Atualizar subgrupo existente
         await updateSubgroup(subgroupForm.id, {
           name: subgroupForm.name,
           description: subgroupForm.description || null,
           group_id: subgroupForm.group_id
         });
       } else {
-        // Criar novo subgrupo
         await createSubgroup({
           name: subgroupForm.name,
           description: subgroupForm.description || null,
@@ -250,7 +240,6 @@ const GroupsManagement = () => {
     }
   };
   
-  // Função para confirmar exclusão
   const handleConfirmDelete = async () => {
     setLoading(true);
     try {
@@ -298,7 +287,6 @@ const GroupsManagement = () => {
         </div>
       </div>
       
-      {/* Visualização Hierárquica de Grupos e Subgrupos */}
       <HierarchicalGroupView 
         groups={groups}
         subgroups={subgroups}
@@ -315,7 +303,6 @@ const GroupsManagement = () => {
         }}
       />
       
-      {/* Dialog para adicionar/editar grupo */}
       <Dialog open={showGroupDialog} onOpenChange={setShowGroupDialog}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
@@ -372,7 +359,6 @@ const GroupsManagement = () => {
         </DialogContent>
       </Dialog>
       
-      {/* Dialog para adicionar/editar subgrupo */}
       <Dialog open={showSubgroupDialog} onOpenChange={setShowSubgroupDialog}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
@@ -450,7 +436,6 @@ const GroupsManagement = () => {
         </DialogContent>
       </Dialog>
       
-      {/* Dialog de confirmação de exclusão */}
       <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <DialogContent className="sm:max-w-[400px]">
           <DialogHeader>
