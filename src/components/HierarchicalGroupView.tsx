@@ -1,11 +1,11 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { Group, Subgroup } from '@/services/groupService';
 import { FolderTree } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import GroupListView from './Group/GroupListView';
 import GroupTableView from './Group/GroupTableView';
+import { useGroupSelection } from '@/hooks/useGroupSelection';
 
 interface HierarchicalGroupViewProps {
   groups: Group[];
@@ -27,29 +27,13 @@ const HierarchicalGroupView: React.FC<HierarchicalGroupViewProps> = ({
   onAddSubgroup
 }) => {
   const [loading, setLoading] = useState(false);
-  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const [searchTerm, setSearchTerm] = useState('');
+  const { expandedGroups, initializeExpandedGroups, toggleGroupExpansion } = useGroupSelection();
 
   // Inicializar expandedGroups quando os grupos mudarem
   useEffect(() => {
-    // Inicialmente, expande todos os grupos
-    const initialExpanded: Record<string, boolean> = {};
-    groups.forEach(group => {
-      // Preservar estado de expansão existente ou definir como true para novos grupos
-      initialExpanded[group.id] = expandedGroups[group.id] !== undefined ? 
-        expandedGroups[group.id] : true;
-    });
-    setExpandedGroups(initialExpanded);
+    initializeExpandedGroups(groups);
   }, [groups]);
-
-  // Função para alternar a expansão de um grupo
-  const toggleGroupExpansion = (groupId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setExpandedGroups(prev => ({
-      ...prev,
-      [groupId]: !prev[groupId]
-    }));
-  };
 
   // Filtragem por termo de busca
   const filteredGroups = searchTerm 

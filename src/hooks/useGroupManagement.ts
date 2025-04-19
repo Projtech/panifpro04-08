@@ -1,17 +1,17 @@
-
 import { useState } from 'react';
 import { Group, Subgroup, deleteGroup, deleteSubgroup } from '@/services/groupService';
 import { toast } from "sonner";
 import { useGroupForm } from './useGroupForm';
 import { useSubgroupForm } from './useSubgroupForm';
 import { useDialogControl } from './useDialogControl';
+import { useGroupSelection } from './useGroupSelection';
 
 export const useGroupManagement = (
   groups: Group[], 
   subgroups: Subgroup[],
   onUpdate: () => void
 ) => {
-  const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
+  const { selectedGroup, setSelectedGroup } = useGroupSelection();
   
   const {
     groupForm,
