@@ -3,6 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { AlertTriangle, ArrowLeft, CheckCircle, List, Loader2, Save } from "lucide-react";
 import { OrderStatus } from "@/services/productionOrderService";
+import StatusBadge from "./StatusBadge";
 
 interface StatusManagerProps {
   isEditing: boolean;
@@ -30,7 +31,10 @@ export default function StatusManager({
   return (
     <Card>
       <div className="p-6">
-        <h2 className="text-xl font-semibold text-bakery-brown mb-4">Ações</h2>
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-semibold text-bakery-brown">Ações</h2>
+          {isEditing && <StatusBadge status={orderStatus} />}
+        </div>
         
         <div className="space-y-4">
           <Button 

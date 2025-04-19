@@ -1,11 +1,11 @@
 
 import { useState } from "react";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { List, Plus } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import RecipeList from "./RecipeList";
+import QuantityInput from "./QuantityInput";
 import { Recipe } from "@/services/recipeService";
 import { useToast } from "@/hooks/use-toast";
 
@@ -127,34 +127,14 @@ export default function RecipeManager({
                 </Select>
               </div>
               
-              <div className="space-y-2">
+              <div className="space-y-2 md:col-span-2">
                 <label htmlFor="quantity" className="form-label">Quantidade *</label>
-                <Input
-                  id="quantity"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={newRecipeQuantity}
-                  onChange={(e) => setNewRecipeQuantity(e.target.value)}
-                  className="form-input"
-                  placeholder="0.00"
+                <QuantityInput
+                  quantity={newRecipeQuantity}
+                  unit={newRecipeUnit}
+                  onQuantityChange={setNewRecipeQuantity}
+                  onUnitChange={setNewRecipeUnit}
                 />
-              </div>
-              
-              <div className="space-y-2">
-                <label htmlFor="unit" className="form-label">Unidade *</label>
-                <Select 
-                  value={newRecipeUnit} 
-                  onValueChange={(value) => setNewRecipeUnit(value as 'kg' | 'un')}
-                >
-                  <SelectTrigger className="form-input">
-                    <SelectValue placeholder="Unidade" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="kg">kg</SelectItem>
-                    <SelectItem value="un">unidades</SelectItem>
-                  </SelectContent>
-                </Select>
               </div>
             </div>
             
