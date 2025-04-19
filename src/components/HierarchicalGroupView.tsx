@@ -1,4 +1,5 @@
-import React, { useEffect } from 'react';
+
+import React, { useState, useEffect } from 'react';
 import { Group, Subgroup } from '@/services/groupService';
 import { FolderTree } from 'lucide-react';
 import { Input } from '@/components/ui/input';
