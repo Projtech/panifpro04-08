@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { Group, Subgroup, GroupData, SubgroupData, createGroup, updateGroup, deleteGroup, createSubgroup, updateSubgroup, deleteSubgroup } from '@/services/groupService';
 import { toast } from "sonner";
@@ -54,11 +53,7 @@ export const useGroupManagement = (
 
   const handleSaveGroup = async () => {
     if (!groupForm.name.trim()) {
-      toast({
-        title: "Erro",
-        description: "O nome do grupo é obrigatório",
-        variant: "destructive"
-      });
+      toast.error("O nome do grupo é obrigatório");
       return;
     }
 
@@ -79,16 +74,13 @@ export const useGroupManagement = (
       setShowGroupDialog(false);
     } catch (error) {
       console.error("Erro ao salvar grupo:", error);
+      toast.error("Erro ao salvar grupo");
     }
   };
 
   const handleAddSubgroup = (groupId?: string) => {
     if (!selectedGroup && !groupId) {
-      toast({
-        title: "Erro",
-        description: "Selecione um grupo antes de adicionar um subgrupo",
-        variant: "destructive"
-      });
+      toast.error("Selecione um grupo antes de adicionar um subgrupo");
       return;
     }
     
@@ -119,20 +111,12 @@ export const useGroupManagement = (
 
   const handleSaveSubgroup = async () => {
     if (!subgroupForm.name.trim()) {
-      toast({
-        title: "Erro",
-        description: "O nome do subgrupo é obrigatório",
-        variant: "destructive"
-      });
+      toast.error("O nome do subgrupo é obrigatório");
       return;
     }
     
     if (!subgroupForm.group_id) {
-      toast({
-        title: "Erro",
-        description: "Selecione um grupo para o subgrupo",
-        variant: "destructive"
-      });
+      toast.error("Selecione um grupo para o subgrupo");
       return;
     }
 
@@ -155,6 +139,7 @@ export const useGroupManagement = (
       setShowSubgroupDialog(false);
     } catch (error) {
       console.error("Erro ao salvar subgrupo:", error);
+      toast.error("Erro ao salvar subgrupo");
     }
   };
 
