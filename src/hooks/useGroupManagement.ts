@@ -1,6 +1,10 @@
+
 import { useState } from 'react';
-import { Group, Subgroup, GroupData, SubgroupData, createGroup, updateGroup, deleteGroup, createSubgroup, updateSubgroup, deleteSubgroup } from '@/services/groupService';
+import { Group, Subgroup, deleteGroup, deleteSubgroup } from '@/services/groupService';
 import { toast } from "sonner";
+import { useGroupForm } from './useGroupForm';
+import { useSubgroupForm } from './useSubgroupForm';
+import { useDialogControl } from './useDialogControl';
 
 export const useGroupManagement = (
   groups: Group[], 
@@ -8,74 +12,51 @@ export const useGroupManagement = (
   onUpdate: () => void
 ) => {
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
-  const [showGroupDialog, setShowGroupDialog] = useState(false);
-  const [showSubgroupDialog, setShowSubgroupDialog] = useState(false);
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [deleteType, setDeleteType] = useState<'group' | 'subgroup'>('group');
-  const [deleteId, setDeleteId] = useState<string>('');
   
-  const [groupForm, setGroupForm] = useState({
-    id: '',
-    name: '',
-    description: ''
-  });
-  
-  const [subgroupForm, setSubgroupForm] = useState({
-    id: '',
-    name: '',
-    description: '',
-    group_id: ''
-  });
+  const {
+    groupForm,
+    setGroupForm,
+    resetForm: resetGroupForm,
+    fillForm: fillGroupForm,
+    handleSaveGroup
+  } = useGroupForm(onUpdate);
+
+  const {
+    subgroupForm,
+    setSubgroupForm,
+    resetForm: resetSubgroupForm,
+    fillForm: fillSubgroupForm,
+    handleSaveSubgroup
+  } = useSubgroupForm(onUpdate);
+
+  const {
+    showGroupDialog,
+    showSubgroupDialog,
+    showDeleteDialog,
+    deleteType,
+    deleteId,
+    openGroupDialog,
+    closeGroupDialog,
+    openSubgroupDialog,
+    closeSubgroupDialog,
+    openDeleteDialog,
+    setShowGroupDialog,
+    setShowSubgroupDialog,
+    setShowDeleteDialog
+  } = useDialogControl();
 
   const handleAddGroup = () => {
-    setGroupForm({
-      id: '',
-      name: '',
-      description: ''
-    });
-    setShowGroupDialog(true);
+    resetGroupForm();
+    openGroupDialog();
   };
 
   const handleEditGroup = (group: Group) => {
-    setGroupForm({
-      id: group.id,
-      name: group.name,
-      description: group.description || ''
-    });
-    setShowGroupDialog(true);
+    fillGroupForm(group);
+    openGroupDialog();
   };
 
   const handleDeleteGroup = (id: string) => {
-    setDeleteType('group');
-    setDeleteId(id);
-    setShowDeleteDialog(true);
-  };
-
-  const handleSaveGroup = async () => {
-    if (!groupForm.name.trim()) {
-      toast.error("O nome do grupo é obrigatório");
-      return;
-    }
-
-    try {
-      if (groupForm.id) {
-        await updateGroup(groupForm.id, {
-          name: groupForm.name,
-          description: groupForm.description || null
-        });
-      } else {
-        await createGroup({
-          name: groupForm.name,
-          description: groupForm.description || null
-        });
-      }
-      
-      onUpdate();
-      setShowGroupDialog(false);
-    } catch (error) {
-      console.error("Erro ao salvar grupo:", error);
-      toast.error("Erro ao salvar grupo");
-    }
+    openDeleteDialog('group', id);
   };
 
   const handleAddSubgroup = (groupId?: string) => {
@@ -84,63 +65,21 @@ export const useGroupManagement = (
       return;
     }
     
-    setSubgroupForm({
-      id: '',
-      name: '',
-      description: '',
+    resetSubgroupForm();
+    setSubgroupForm(prev => ({
+      ...prev,
       group_id: groupId || selectedGroup?.id || ''
-    });
-    setShowSubgroupDialog(true);
+    }));
+    openSubgroupDialog();
   };
 
   const handleEditSubgroup = (subgroup: Subgroup) => {
-    setSubgroupForm({
-      id: subgroup.id,
-      name: subgroup.name,
-      description: subgroup.description || '',
-      group_id: subgroup.group_id
-    });
-    setShowSubgroupDialog(true);
+    fillSubgroupForm(subgroup);
+    openSubgroupDialog();
   };
 
   const handleDeleteSubgroup = (id: string) => {
-    setDeleteType('subgroup');
-    setDeleteId(id);
-    setShowDeleteDialog(true);
-  };
-
-  const handleSaveSubgroup = async () => {
-    if (!subgroupForm.name.trim()) {
-      toast.error("O nome do subgrupo é obrigatório");
-      return;
-    }
-    
-    if (!subgroupForm.group_id) {
-      toast.error("Selecione um grupo para o subgrupo");
-      return;
-    }
-
-    try {
-      if (subgroupForm.id) {
-        await updateSubgroup(subgroupForm.id, {
-          name: subgroupForm.name,
-          description: subgroupForm.description || null,
-          group_id: subgroupForm.group_id
-        });
-      } else {
-        await createSubgroup({
-          name: subgroupForm.name,
-          description: subgroupForm.description || null,
-          group_id: subgroupForm.group_id
-        });
-      }
-      
-      onUpdate();
-      setShowSubgroupDialog(false);
-    } catch (error) {
-      console.error("Erro ao salvar subgrupo:", error);
-      toast.error("Erro ao salvar subgrupo");
-    }
+    openDeleteDialog('subgroup', id);
   };
 
   const handleConfirmDelete = async () => {
@@ -155,7 +94,7 @@ export const useGroupManagement = (
       
       if (success) {
         onUpdate();
-        setShowDeleteDialog(false);
+        closeDeleteDialog();
       }
     } catch (error) {
       console.error("Erro ao excluir:", error);
