@@ -32,10 +32,10 @@ export const useGroupForm = (onUpdate: () => void) => {
     });
   };
 
-  const handleSaveGroup = async () => {
+  const handleSaveGroup = async (): Promise<boolean> => {
     if (!groupForm.name.trim()) {
       toast.error("O nome do grupo é obrigatório");
-      return;
+      return false;
     }
 
     try {

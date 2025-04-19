@@ -40,9 +40,7 @@ export const useGroupManagement = (
     openSubgroupDialog,
     closeSubgroupDialog,
     openDeleteDialog,
-    setShowGroupDialog,
-    setShowSubgroupDialog,
-    setShowDeleteDialog
+    closeDeleteDialog
   } = useDialogControl();
 
   const handleAddGroup = () => {
@@ -82,7 +80,7 @@ export const useGroupManagement = (
     openDeleteDialog('subgroup', id);
   };
 
-  const handleConfirmDelete = async () => {
+  const handleConfirmDelete = async (): Promise<void> => {
     try {
       let success = false;
       
@@ -118,9 +116,10 @@ export const useGroupManagement = (
     handleDeleteSubgroup,
     handleSaveSubgroup,
     handleConfirmDelete,
-    setShowGroupDialog,
-    setShowSubgroupDialog,
-    setShowDeleteDialog,
+    setSelectedGroup,
+    setShowGroupDialog: closeGroupDialog,
+    setShowSubgroupDialog: closeSubgroupDialog,
+    setShowDeleteDialog: closeDeleteDialog,
     setGroupForm,
     setSubgroupForm
   };

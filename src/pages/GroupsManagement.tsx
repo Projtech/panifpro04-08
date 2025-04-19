@@ -59,6 +59,15 @@ const GroupsManagement = () => {
     handleAddSubgroup
   } = useGroupManagement(groups, subgroups, loadData);
   
+  // Adaptador para compatibilidade de tipos
+  const handleSaveGroupWrapper = async (): Promise<void> => {
+    await handleSaveGroup();
+  };
+  
+  const handleSaveSubgroupWrapper = async (): Promise<void> => {
+    await handleSaveSubgroup();
+  };
+  
   return (
     <div className="animate-fade-in">
       <div className="flex items-center justify-between mb-6">
@@ -99,7 +108,7 @@ const GroupsManagement = () => {
         onOpenChange={setShowGroupDialog}
         groupForm={groupForm}
         setGroupForm={setGroupForm}
-        onSave={handleSaveGroup}
+        onSave={handleSaveGroupWrapper}
         loading={loading}
       />
       
@@ -108,7 +117,7 @@ const GroupsManagement = () => {
         onOpenChange={setShowSubgroupDialog}
         subgroupForm={subgroupForm}
         setSubgroupForm={setSubgroupForm}
-        onSave={handleSaveSubgroup}
+        onSave={handleSaveSubgroupWrapper}
         groups={groups}
         loading={loading}
       />

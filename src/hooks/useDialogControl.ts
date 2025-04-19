@@ -32,9 +32,6 @@ export const useDialogControl = () => {
     openSubgroupDialog,
     closeSubgroupDialog,
     openDeleteDialog,
-    closeDeleteDialog,
-    setShowGroupDialog,
-    setShowSubgroupDialog,
-    setShowDeleteDialog
+    closeDeleteDialog
   };
 };

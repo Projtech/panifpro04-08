@@ -36,15 +36,15 @@ export const useSubgroupForm = (onUpdate: () => void) => {
     });
   };
 
-  const handleSaveSubgroup = async () => {
+  const handleSaveSubgroup = async (): Promise<boolean> => {
     if (!subgroupForm.name.trim()) {
       toast.error("O nome do subgrupo é obrigatório");
-      return;
+      return false;
     }
     
     if (!subgroupForm.group_id) {
       toast.error("Selecione um grupo para o subgrupo");
-      return;
+      return false;
     }
 
     try {
