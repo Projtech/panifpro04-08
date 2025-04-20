@@ -181,14 +181,22 @@ export default function Products() {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     
-    if (['cost', 'unit_price', 'unit_weight', 'kg_weight'].includes(name) && value) {
-      const numericValue = parseDecimalBR(value);
-      setProductForm(prev => ({ ...prev, [name]: numericValue }));
+    if (['cost', 'unit_price', 'unit_weight', 'kg_weight'].includes(name)) {
+      setProductForm(prev => ({ ...prev, [name]: value }));
     } else {
       setProductForm(prev => ({ ...prev, [name]: value }));
     }
   };
-  
+
+  const handleNumericBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    
+    if (['cost', 'unit_price', 'unit_weight', 'kg_weight'].includes(name)) {
+      const numericValue = parseDecimalBR(value);
+      setProductForm(prev => ({ ...prev, [name]: numericValue }));
+    }
+  };
+
   const handleCheckboxChange = (day: string, checked: boolean) => {
     if (day === 'all_days') {
       setProductForm(prev => ({
@@ -621,6 +629,7 @@ export default function Products() {
                       inputMode="decimal"
                       value={productForm.unit_weight !== null ? formatInputDecimalBR(productForm.unit_weight, 3) : ''}
                       onChange={handleInputChange}
+                      onBlur={handleNumericBlur}
                       className="col-span-3"
                       placeholder="0,000"
                     />
@@ -637,6 +646,7 @@ export default function Products() {
                       inputMode="decimal"
                       value={productForm.kg_weight !== null ? formatInputDecimalBR(productForm.kg_weight, 3) : ''}
                       onChange={handleInputChange}
+                      onBlur={handleNumericBlur}
                       className="col-span-3"
                       placeholder="0,000"
                     />
@@ -654,6 +664,7 @@ export default function Products() {
                     inputMode="decimal"
                     value={productForm.cost !== null ? formatInputDecimalBR(productForm.cost, 2) : ''}
                     onChange={handleInputChange}
+                    onBlur={handleNumericBlur}
                     className="col-span-3"
                     placeholder="0,00"
                   />
@@ -670,6 +681,7 @@ export default function Products() {
                     inputMode="decimal"
                     value={productForm.unit_price !== null ? formatInputDecimalBR(productForm.unit_price, 2) : ''}
                     onChange={handleInputChange}
+                    onBlur={handleNumericBlur}
                     className="col-span-3"
                     placeholder="0,00"
                   />
@@ -1204,6 +1216,7 @@ export default function Products() {
                   inputMode="decimal"
                   value={productForm.unit_weight !== null ? formatInputDecimalBR(productForm.unit_weight, 3) : ''}
                   onChange={handleInputChange}
+                  onBlur={handleNumericBlur}
                   className="col-span-3"
                   disabled={!!selectedProduct?.recipe_id}
                 />
@@ -1220,6 +1233,7 @@ export default function Products() {
                   inputMode="decimal"
                   value={productForm.kg_weight !== null ? formatInputDecimalBR(productForm.kg_weight, 3) : ''}
                   onChange={handleInputChange}
+                  onBlur={handleNumericBlur}
                   className="col-span-3"
                   disabled={!!selectedProduct?.recipe_id}
                 />
@@ -1237,6 +1251,7 @@ export default function Products() {
                 inputMode="decimal"
                 value={productForm.cost || ''}
                 onChange={handleInputChange}
+                onBlur={handleNumericBlur}
                 className="col-span-3"
                 disabled={!!selectedProduct?.recipe_id}
               />
@@ -1253,6 +1268,7 @@ export default function Products() {
                 inputMode="decimal"
                 value={productForm.unit_price || ''}
                 onChange={handleInputChange}
+                onBlur={handleNumericBlur}
                 className="col-span-3"
                 disabled={!!selectedProduct?.recipe_id}
               />

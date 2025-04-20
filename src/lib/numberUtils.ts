@@ -1,3 +1,4 @@
+
 /**
  * Utilitários para manipulação de números no formato brasileiro
  */
@@ -15,9 +16,19 @@ export function parseDecimalBR(value: string): number | null {
   // Remove qualquer caractere que não seja número ou vírgula
   const sanitized = value.replace(/[^\d,]/g, '');
   
-  // Substitui vírgula por ponto para o JavaScript entender
-  const converted = sanitized.replace(',', '.');
+  // Garante que haja apenas uma vírgula no número
+  const parts = sanitized.split(',');
+  if (parts.length > 2) {
+    // Se houver mais de uma vírgula, junta tudo e mantém só a primeira
+    const intPart = parts[0];
+    const decPart = parts.slice(1).join('');
+    const converted = `${intPart}.${decPart}`;
+    const number = parseFloat(converted);
+    return isNaN(number) ? null : number;
+  }
   
+  // Caso normal com 0 ou 1 vírgula
+  const converted = sanitized.replace(',', '.');
   const number = parseFloat(converted);
   return isNaN(number) ? null : number;
 }

@@ -41,14 +41,12 @@ export function EnhancedAutocomplete({
   const inputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLUListElement>(null);
 
-  // Update input value when props.value changes
   useEffect(() => {
     if (props.value !== undefined && props.value !== null) {
       setInputValue(props.value.toString());
     }
   }, [props.value]);
 
-  // Filter suggestions based on input value
   useEffect(() => {
     if (inputValue) {
       const filtered = suggestions.filter(suggestion =>
@@ -86,7 +84,6 @@ export function EnhancedAutocomplete({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    // Enter key
     if (e.key === 'Enter') {
       e.preventDefault();
       if (filteredSuggestions.length > 0 && showSuggestions) {
@@ -98,28 +95,24 @@ export function EnhancedAutocomplete({
         }
       }
     }
-    // Arrow up
     else if (e.key === 'ArrowUp') {
       e.preventDefault();
       if (activeSuggestionIndex > 0) {
         setActiveSuggestionIndex(activeSuggestionIndex - 1);
       }
     }
-    // Arrow down
     else if (e.key === 'ArrowDown') {
       e.preventDefault();
       if (activeSuggestionIndex < filteredSuggestions.length - 1) {
         setActiveSuggestionIndex(activeSuggestionIndex + 1);
       }
     }
-    // Escape
     else if (e.key === 'Escape') {
       setShowSuggestions(false);
     }
   };
 
   const handleBlur = () => {
-    // Delay hiding suggestions to allow click events to fire
     setTimeout(() => {
       setShowSuggestions(false);
     }, 200);
@@ -131,7 +124,6 @@ export function EnhancedAutocomplete({
     }
   };
 
-  // Check if value exists in suggestions (ignoring case)
   const valueExists = (value: string) => {
     return suggestions.some(suggestion => 
       suggestion.toLowerCase() === value.toLowerCase() && 
@@ -139,7 +131,6 @@ export function EnhancedAutocomplete({
     );
   };
 
-  // Highlight text that matches the input
   const highlightMatch = (text: string, query: string) => {
     if (!query) return text;
     
@@ -155,29 +146,16 @@ export function EnhancedAutocomplete({
     );
   };
 
-  // Determine if the current value is a duplicate
   const isDuplicateValue = highlightDuplicates && inputValue && valueExists(inputValue);
 
-  // Definir classes com base no tamanho
   const getInputHeight = () => {
     switch (size) {
       case 'lg':
-        return 'h-12';
+        return 'h-12 text-base';
       case 'xl':
-        return 'h-14';
+        return 'h-14 text-lg';
       default:
-        return 'h-10';
-    }
-  };
-
-  const getFontSize = () => {
-    switch (size) {
-      case 'lg':
-        return 'text-base';
-      case 'xl':
-        return 'text-lg';
-      default:
-        return 'text-sm';
+        return 'h-10 text-sm';
     }
   };
 
@@ -198,13 +176,11 @@ export function EnhancedAutocomplete({
         onFocus={handleFocus}
         onBlur={handleBlur}
         className={cn(
-          className,
+          "flex w-full rounded-md border border-input bg-background px-3 py-2 ring-offset-background file:border-0 file:bg-transparent file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
           getInputHeight(),
-          getFontSize(),
-          'px-4 w-full',
+          className,
           (isDuplicateValue || isDuplicate || error) && 'border-red-500 focus:ring-red-500'
         )}
-        autoComplete="off"
         style={{ width: '100%', minWidth: '100%' }}
       />
       
