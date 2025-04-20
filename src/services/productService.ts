@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { parseDecimalBR } from "@/lib/numberUtils";
 
 export type ProductType = 'materia_prima' | 'embalagem' | 'subproduto' | 'decoracao';
 
@@ -27,6 +28,32 @@ export interface Product {
   friday?: boolean | null;
   saturday?: boolean | null;
   sunday?: boolean | null;
+}
+
+function validateProduct(product: Omit<Product, 'id'>): string | null {
+  if (!product.name || !product.unit) {
+    return "Preencha os campos obrigatórios: nome e unidade";
+  }
+
+  if (product.unit.toLowerCase() === 'kg') {
+    if (!product.kg_weight || product.kg_weight <= 0) {
+      return "Para produtos em kg, informe o peso em kg";
+    }
+  } else {
+    if (!product.unit_weight || product.unit_weight <= 0) {
+      return "Para produtos em unidades, informe o peso por unidade";
+    }
+  }
+
+  if (product.cost === null || product.cost < 0) {
+    return "O custo não pode ser negativo";
+  }
+
+  if (product.min_stock === null || product.min_stock < 0) {
+    return "O estoque mínimo não pode ser negativo";
+  }
+
+  return null;
 }
 
 export async function getProducts(): Promise<Product[]> {
@@ -66,7 +93,6 @@ export async function getProduct(id: string): Promise<Product | null> {
   }
 }
 
-// Função para verificar se já existe um produto com o mesmo nome (ignorando case)
 export async function checkProductNameExists(name: string, excludeId?: string): Promise<boolean> {
   try {
     const query = supabase
@@ -74,7 +100,6 @@ export async function checkProductNameExists(name: string, excludeId?: string): 
       .select('id, name')
       .ilike('name', name);
     
-    // Se estamos excluindo um ID (caso de edição), adicione essa condição
     if (excludeId) {
       query.neq('id', excludeId);
     }
@@ -85,11 +110,10 @@ export async function checkProductNameExists(name: string, excludeId?: string): 
     return data && data.length > 0;
   } catch (error) {
     console.error("[PRODUCTS] Error checking product name:", error);
-    return false; // Em caso de erro, permitimos continuar para não bloquear o usuário
+    return false;
   }
 }
 
-// Função para verificar se já existe um produto com o mesmo SKU
 export async function checkProductSkuExists(sku: string, excludeId?: string): Promise<boolean> {
   if (!sku) return false;
   
@@ -99,7 +123,6 @@ export async function checkProductSkuExists(sku: string, excludeId?: string): Pr
       .select('id, sku')
       .eq('sku', sku);
     
-    // Se estamos excluindo um ID (caso de edição), adicione essa condição
     if (excludeId) {
       query.neq('id', excludeId);
     }
@@ -110,31 +133,40 @@ export async function checkProductSkuExists(sku: string, excludeId?: string): Pr
     return data && data.length > 0;
   } catch (error) {
     console.error("[PRODUCTS] Error checking product SKU:", error);
-    return false; // Em caso de erro, permitimos continuar para não bloquear o usuário
+    return false;
   }
 }
 
-// Atualizar a função createProduct para refletir os novos campos não obrigatórios
-export async function createProduct(product: Omit<Product, 'id'>): Promise<Product | null> {
-  console.log("[PRODUCTS] Creating new product:", product.name);
+export async function createProduct(productData: Omit<Product, 'id'>): Promise<Product | null> {
+  console.log("[PRODUCTS] Creating new product:", productData.name);
   try {
-    // Verificar se os campos obrigatórios estão preenchidos
-    if (!product.name || !product.unit) {
-      toast.error("Preencha todos os campos obrigatórios");
+    const validationError = validateProduct(productData);
+    if (validationError) {
+      toast.error(validationError);
       return null;
     }
 
-    // Verificar se já existe um produto com o mesmo nome
-    const nameExists = await checkProductNameExists(product.name);
+    const nameExists = await checkProductNameExists(productData.name);
     if (nameExists) {
-      toast.error(`Já existe um produto com o nome "${product.name}". Escolha um nome diferente.`);
+      toast.error(`Já existe um produto com o nome "${productData.name}". Escolha um nome diferente.`);
       return null;
     }
 
-    // Garantir que o campo cost tenha um valor válido
+    if (productData.sku) {
+      const skuExists = await checkProductSkuExists(productData.sku);
+      if (skuExists) {
+        toast.error(`Já existe um produto com o SKU "${productData.sku}". Escolha um SKU diferente.`);
+        return null;
+      }
+    }
+
     const productToCreate = {
-      ...product,
-      cost: product.cost === null || product.cost === undefined ? 0 : product.cost
+      ...productData,
+      cost: productData.cost || 0,
+      min_stock: productData.min_stock || 0,
+      current_stock: productData.current_stock || 0,
+      unit_price: productData.unit_price || 0,
+      type: productData.type || 'materia_prima'
     };
 
     const { data, error } = await supabase
@@ -154,36 +186,45 @@ export async function createProduct(product: Omit<Product, 'id'>): Promise<Produ
   }
 }
 
-export async function updateProduct(id: string, product: Partial<Product>): Promise<Product | null> {
-  console.log(`[PRODUCTS] Updating product ${id}:`, product);
+export async function updateProduct(id: string, productData: Partial<Product>): Promise<Product | null> {
+  console.log(`[PRODUCTS] Updating product ${id}:`, productData);
   try {
-    // Verificar se já existe um produto com o mesmo nome (excluindo o produto atual)
-    if (product.name) {
-      const nameExists = await checkProductNameExists(product.name, id);
-      if (nameExists) {
-        toast.error(`Já existe um produto com o nome "${product.name}". Escolha um nome diferente.`);
-        return null;
-      }
+    const currentProduct = await getProduct(id);
+    if (!currentProduct) {
+      toast.error("Produto não encontrado");
+      return null;
     }
-    
-    // Verificar se já existe um produto com o mesmo SKU (excluindo o produto atual)
-    if (product.sku) {
-      const skuExists = await checkProductSkuExists(product.sku, id);
-      if (skuExists) {
-        toast.error(`Já existe um produto com o SKU "${product.sku}". Escolha um SKU diferente.`);
-        return null;
-      }
-    }
-    
-    // Garantir que o campo cost tenha um valor válido se estiver sendo atualizado
-    const productToUpdate = {
-      ...product,
-      cost: product.cost === null || product.cost === undefined ? 0 : product.cost
+
+    const updatedProduct = {
+      ...currentProduct,
+      ...productData
     };
+
+    const validationError = validateProduct(updatedProduct);
+    if (validationError) {
+      toast.error(validationError);
+      return null;
+    }
+
+    if (productData.name && productData.name !== currentProduct.name) {
+      const nameExists = await checkProductNameExists(productData.name, id);
+      if (nameExists) {
+        toast.error(`Já existe um produto com o nome "${productData.name}". Escolha um nome diferente.`);
+        return null;
+      }
+    }
+
+    if (productData.sku && productData.sku !== currentProduct.sku) {
+      const skuExists = await checkProductSkuExists(productData.sku, id);
+      if (skuExists) {
+        toast.error(`Já existe um produto com o SKU "${productData.sku}". Escolha um SKU diferente.`);
+        return null;
+      }
+    }
 
     const { data, error } = await supabase
       .from('products')
-      .update(productToUpdate)
+      .update(productData)
       .eq('id', id)
       .select()
       .single();
@@ -202,7 +243,6 @@ export async function updateProduct(id: string, product: Partial<Product>): Prom
 export async function deleteProduct(id: string): Promise<boolean> {
   console.log(`[PRODUCTS] Deleting product with ID: ${id}`);
   try {
-    // Verificar se o produto foi usado em pedidos de produção
     const { data: productionItems, error: productionError } = await supabase
       .from('inventory_transactions')
       .select('id')
