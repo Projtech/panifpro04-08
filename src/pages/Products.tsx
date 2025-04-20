@@ -75,9 +75,9 @@ export default function Products() {
   const [productForm, setProductForm] = useState<Omit<Product, 'id'>>({
     name: '',
     unit: 'Kg',
-    sku: '',  // Inicializar como string vazia em vez de null
+    sku: '',
     supplier: '',
-    cost: 0, // Valor padrão para evitar erro de NOT NULL
+    cost: 0,
     min_stock: 0,
     current_stock: null,
     unit_price: null,
@@ -85,7 +85,6 @@ export default function Products() {
     kg_weight: null,
     group_id: null,
     subgroup_id: null,
-    // Dias da semana para o calendário de produção
     all_days: false,
     monday: false,
     tuesday: false,
@@ -142,7 +141,6 @@ export default function Products() {
     fetchGroups();
     fetchSubgroups();
     
-    // Configurar atualização automática a cada 5 minutos
     refreshTimerRef.current = setInterval(() => {
       console.log("Atualizando produtos automaticamente...");
       fetchProducts();
@@ -155,13 +153,11 @@ export default function Products() {
     };
   }, []);
   
-  // Filtrar subgrupos com base no grupo selecionado
   useEffect(() => {
     if (productForm.group_id) {
       const filtered = subgroups.filter(subgroup => subgroup.group_id === productForm.group_id);
       setFilteredSubgroups(filtered);
       
-      // Se o subgrupo atual não pertence ao grupo selecionado, resetar
       if (productForm.subgroup_id) {
         const belongsToGroup = filtered.some(sg => sg.id === productForm.subgroup_id);
         if (!belongsToGroup) {
@@ -174,7 +170,6 @@ export default function Products() {
     }
   }, [productForm.group_id, subgroups]);
   
-  // Filtrar e ordenar produtos por nome
   const filteredProducts = products
     .filter(product =>
       product.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -186,9 +181,7 @@ export default function Products() {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     
-    // Tratamento especial para campos numéricos
     if (['cost', 'unit_price', 'unit_weight', 'kg_weight'].includes(name) && value) {
-      // Converte o valor com vírgula para o formato que o JavaScript entende
       const numericValue = parseDecimalBR(value);
       setProductForm(prev => ({ ...prev, [name]: numericValue }));
     } else {
@@ -196,9 +189,7 @@ export default function Products() {
     }
   };
   
-  // Handle checkbox change
   const handleCheckboxChange = (day: string, checked: boolean) => {
-    // Se for o checkbox 'all_days', atualiza todos os dias
     if (day === 'all_days') {
       setProductForm(prev => ({
         ...prev,
@@ -212,21 +203,17 @@ export default function Products() {
         sunday: checked
       }));
     } else {
-      // Atualiza apenas o dia específico
       setProductForm(prev => ({ 
         ...prev, 
         [day]: checked,
-        // Se um dia específico for desmarcado, 'all_days' também deve ser desmarcado
         ...(checked === false ? { all_days: false } : {})
       }));
       
-      // Verificar se todos os dias estão marcados para atualizar o 'all_days'
       const updatedForm = {
         ...productForm,
         [day]: checked
       };
       
-      // Se todos os dias específicos estiverem marcados, marca 'all_days' também
       if (
         updatedForm.monday &&
         updatedForm.tuesday &&
@@ -245,7 +232,6 @@ export default function Products() {
     setProductForm(prev => ({ ...prev, [name]: value }));
   };
   
-  // Verificar duplicatas de nome e SKU ao digitar
   const checkDuplicateName = async (name: string) => {
     if (!name) return;
     const nameExists = await checkProductNameExists(name);
@@ -261,14 +247,11 @@ export default function Products() {
   };
 
   const handleCreate = async () => {
-    // Reset error highlighting
     setFieldErrors({});
     
-    // Check required fields
     const newFieldErrors: Record<string, boolean> = {};
     let hasError = false;
     
-    // Required fields validation
     if (!productForm.name) {
       newFieldErrors.name = true;
       hasError = true;
@@ -277,14 +260,12 @@ export default function Products() {
       newFieldErrors.unit = true;
       hasError = true;
     }
-    // Verificar se o SKU está vazio
     if (!productForm.sku || productForm.sku.trim() === '') {
       newFieldErrors.sku = true;
       hasError = true;
       toast.error("O campo SKU é obrigatório.");
     }
     
-    // Verificar duplicatas
     const nameExists = await checkDuplicateName(productForm.name);
     const skuExists = productForm.sku ? await checkDuplicateSku(productForm.sku) : false;
     
@@ -299,7 +280,6 @@ export default function Products() {
       return;
     }
     
-    // Show error message if validation fails
     if (hasError) {
       setFieldErrors(newFieldErrors);
       toast.error("Preencha todos os campos obrigatórios.");
@@ -308,7 +288,6 @@ export default function Products() {
     
     setLoading(true);
     
-    // Create product
     const newProduct = await createProduct({
       ...productForm,
       cost: productForm.cost ? Number(productForm.cost) : null,
@@ -322,13 +301,12 @@ export default function Products() {
     if (newProduct) {
       setProducts([...products, newProduct]);
       setOpen(false);
-      // Resetar o formulário com valores iniciais corretos
       setProductForm({
         name: '',
         unit: 'Kg',
         sku: '',
         supplier: '',
-        cost: 0, // Valor padrão para evitar erro de NOT NULL
+        cost: 0,
         min_stock: 0,
         current_stock: null,
         unit_price: null,
@@ -336,7 +314,6 @@ export default function Products() {
         kg_weight: null,
         group_id: null,
         subgroup_id: null,
-        // Dias da semana para o calendário de produção
         all_days: false,
         monday: false,
         tuesday: false,
@@ -352,14 +329,11 @@ export default function Products() {
   };
   
   const handleEdit = async () => {
-    // Reset error highlighting
     setFieldErrors({});
     
-    // Check required fields
     const newFieldErrors: Record<string, boolean> = {};
     let hasError = false;
     
-    // Required fields validation
     if (!productForm.name) {
       newFieldErrors.name = true;
       hasError = true;
@@ -368,14 +342,12 @@ export default function Products() {
       newFieldErrors.unit = true;
       hasError = true;
     }
-    // Verificar se o SKU está vazio
     if (!productForm.sku || productForm.sku.trim() === '') {
       newFieldErrors.sku = true;
       hasError = true;
       toast.error("O campo SKU é obrigatório.");
     }
     
-    // Verificar duplicatas
     if (selectedProduct) {
       const nameExists = await checkProductNameExists(productForm.name, selectedProduct.id);
       const skuExists = productForm.sku ? await checkProductSkuExists(productForm.sku, selectedProduct.id) : false;
@@ -392,7 +364,6 @@ export default function Products() {
       }
     }
     
-    // Show error message if validation fails
     if (hasError) {
       setFieldErrors(newFieldErrors);
       toast.error("Preencha todos os campos obrigatórios.");
@@ -403,7 +374,6 @@ export default function Products() {
     
     setLoading(true);
     
-    // Update product
     const updatedProduct = await updateProduct(selectedProduct.id, {
       ...productForm,
       cost: productForm.cost ? Number(productForm.cost) : null,
@@ -423,7 +393,7 @@ export default function Products() {
         unit: 'Kg',
         sku: '',
         supplier: '',
-        cost: 0, // Valor padrão para evitar erro de NOT NULL
+        cost: 0,
         min_stock: 0,
         current_stock: null,
         unit_price: null,
@@ -431,7 +401,6 @@ export default function Products() {
         kg_weight: null,
         group_id: null,
         subgroup_id: null,
-        // Dias da semana para o calendário de produção
         all_days: false,
         monday: false,
         tuesday: false,
@@ -449,7 +418,6 @@ export default function Products() {
   const handleDelete = async (id: string) => {
     setLoading(true);
     
-    // Delete product
     const success = await deleteProduct(id);
     
     if (success) {
@@ -477,7 +445,6 @@ export default function Products() {
       kg_weight: product.kg_weight || null,
       group_id: product.group_id || null,
       subgroup_id: product.subgroup_id || null,
-      // Dias da semana para o calendário de produção
       all_days: product.all_days || false,
       monday: product.monday || false,
       tuesday: product.tuesday || false,
@@ -532,7 +499,7 @@ export default function Products() {
                 Adicionar Produto
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px]">
+            <DialogContent className="sm:max-w-[600px]">
               <DialogHeader>
                 <DialogTitle>Novo Produto</DialogTitle>
                 <DialogDescription>
@@ -543,7 +510,7 @@ export default function Products() {
               <div className="grid gap-4 py-4">
                 <div className="grid grid-cols-4 items-center gap-4">
                   <label htmlFor="name" className="text-right font-medium">
-                    Nome <span className="text-red-500">*</span>
+                    Nome
                   </label>
                   <EnhancedAutocomplete
                     id="name"
@@ -561,18 +528,37 @@ export default function Products() {
                     className="col-span-3 w-full"
                     isDuplicate={isDuplicateName}
                     error={fieldErrors.name}
-                    size="default"
+                    size="lg"
                     placeholder="Digite o nome do produto"
                   />
                 </div>
+
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <label htmlFor="type" className="text-right font-medium">
+                    Tipo
+                  </label>
+                  <select
+                    id="type"
+                    name="type"
+                    value={productForm.type || 'materia_prima'}
+                    onChange={handleInputChange}
+                    className="col-span-3 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                  >
+                    <option value="materia_prima">Matéria Prima</option>
+                    <option value="embalagem">Embalagem</option>
+                    <option value="subproduto">Subproduto</option>
+                    <option value="decoracao">Decoração</option>
+                  </select>
+                </div>
+
                 <div className="grid grid-cols-4 items-center gap-4">
                   <label htmlFor="unit" className="text-right font-medium">
-                    Unidade <span className="text-red-500">*</span>
+                    Unidade
                   </label>
                   <div className="col-span-3">
                     <select
                       id="unit"
-                      className={`flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${!productForm.unit && 'border-red-500'}`}
+                      className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
                       value={productForm.unit}
                       onChange={(e) => setProductForm(prev => ({ ...prev, unit: e.target.value }))}
                     >
@@ -583,9 +569,10 @@ export default function Products() {
                     </select>
                   </div>
                 </div>
+
                 <div className="grid grid-cols-4 items-center gap-4">
-                  <label htmlFor="sku" className="text-right font-medium">
-                    SKU <span className="text-red-500">*</span>
+                  <label htmlFor="sku" className="text-right font-medium text-gray-500">
+                    SKU
                   </label>
                   <EnhancedAutocomplete
                     id="sku"
@@ -602,13 +589,14 @@ export default function Products() {
                     suggestions={products.map(product => product.sku || '').filter(Boolean)}
                     className="col-span-3 w-full"
                     isDuplicate={isDuplicateSku}
-                    error={!productForm.sku}
+                    error={fieldErrors.sku}
                     size="default"
                     placeholder="Digite o código/SKU do produto"
                   />
                 </div>
+
                 <div className="grid grid-cols-4 items-center gap-4">
-                  <label htmlFor="supplier" className="text-right font-medium">
+                  <label htmlFor="supplier" className="text-right font-medium text-gray-500">
                     Fornecedor
                   </label>
                   <Input
@@ -620,39 +608,44 @@ export default function Products() {
                     placeholder="Nome do fornecedor"
                   />
                 </div>
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <label htmlFor="unit_weight" className="text-right font-medium">
-                    Peso da Unidade
-                  </label>
-                  <Input
-                    id="unit_weight"
-                    name="unit_weight"
-                    type="text"
-                    inputMode="decimal"
-                    value={productForm.unit_weight !== null ? formatInputDecimalBR(productForm.unit_weight, 3) : ''}
-                    onChange={handleInputChange}
-                    className="col-span-3"
-                    placeholder="0,000"
-                  />
-                </div>
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <label htmlFor="kg_weight" className="text-right font-medium">
-                    Peso do Kg
-                  </label>
-                  <Input
-                    id="kg_weight"
-                    name="kg_weight"
-                    type="text"
-                    inputMode="decimal"
-                    value={productForm.kg_weight !== null ? formatInputDecimalBR(productForm.kg_weight, 3) : ''}
-                    onChange={handleInputChange}
-                    className="col-span-3"
-                    placeholder="0,000"
-                  />
-                </div>
+
+                {productForm.unit === 'Un' ? (
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <label htmlFor="unit_weight" className="text-right font-medium">
+                      Peso da Unidade
+                    </label>
+                    <Input
+                      id="unit_weight"
+                      name="unit_weight"
+                      type="text"
+                      inputMode="decimal"
+                      value={productForm.unit_weight !== null ? formatInputDecimalBR(productForm.unit_weight, 3) : ''}
+                      onChange={handleInputChange}
+                      className="col-span-3"
+                      placeholder="0,000"
+                    />
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <label htmlFor="kg_weight" className="text-right font-medium">
+                      Peso do Kg
+                    </label>
+                    <Input
+                      id="kg_weight"
+                      name="kg_weight"
+                      type="text"
+                      inputMode="decimal"
+                      value={productForm.kg_weight !== null ? formatInputDecimalBR(productForm.kg_weight, 3) : ''}
+                      onChange={handleInputChange}
+                      className="col-span-3"
+                      placeholder="0,000"
+                    />
+                  </div>
+                )}
+
                 <div className="grid grid-cols-4 items-center gap-4">
                   <label htmlFor="cost" className="text-right font-medium">
-                    Custo por Kg
+                    Custo por {productForm.unit}
                   </label>
                   <Input
                     id="cost"
@@ -665,6 +658,7 @@ export default function Products() {
                     placeholder="0,00"
                   />
                 </div>
+                
                 <div className="grid grid-cols-4 items-center gap-4">
                   <label htmlFor="unit_price" className="text-right font-medium">
                     Preço por Un
@@ -680,6 +674,7 @@ export default function Products() {
                     placeholder="0,00"
                   />
                 </div>
+                
                 <div className="grid grid-cols-4 items-center gap-4">
                   <label htmlFor="group_id" className="text-right font-medium">
                     Grupo
@@ -700,6 +695,7 @@ export default function Products() {
                     </select>
                   </div>
                 </div>
+                
                 <div className="grid grid-cols-4 items-center gap-4">
                   <label htmlFor="subgroup_id" className="text-right font-medium">
                     Subgrupo
@@ -1014,7 +1010,7 @@ export default function Products() {
       </Card>
       
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
             <DialogTitle>
               <div className="flex items-center gap-2">
@@ -1032,7 +1028,7 @@ export default function Products() {
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-4 items-center gap-4">
               <label htmlFor="name" className="text-right font-medium">
-                Nome <span className="text-red-500">*</span>
+                Nome
               </label>
               <EnhancedAutocomplete
                 id="name"
@@ -1057,29 +1053,51 @@ export default function Products() {
                 isDuplicate={isDuplicateName}
                 error={fieldErrors.name}
                 disabled={!!selectedProduct?.recipe_id}
-                size="default"
+                size="lg"
                 placeholder="Digite o nome do produto"
               />
             </div>
+
             <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="unit" className="text-right font-medium">
-                Unidade <span className="text-red-500">*</span>
+              <label htmlFor="type" className="text-right font-medium">
+                Tipo
               </label>
               <select
-                id="unit"
-                name="unit"
-                value={productForm.unit}
+                id="type"
+                name="type"
+                value={productForm.type || 'materia_prima'}
                 onChange={handleInputChange}
-                className={`col-span-3 flex h-10 w-full rounded-md border ${fieldErrors.unit ? 'border-red-500' : 'border-input'} bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50`}
-                disabled={!!selectedProduct?.recipe_id}
+                className="col-span-3 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
               >
-                <option value="">Selecione a unidade</option>
-                <option value="Kg">Kg</option>
-                <option value="Lt">Lt</option>
-                <option value="Un">Un</option>
-                <option value="Gr">Gr</option>
+                <option value="materia_prima">Matéria Prima</option>
+                <option value="embalagem">Embalagem</option>
+                <option value="subproduto">Subproduto</option>
+                <option value="decoracao">Decoração</option>
               </select>
             </div>
+
+            <div className="grid grid-cols-4 items-center gap-4">
+              <label htmlFor="unit" className="text-right font-medium">
+                Unidade
+              </label>
+              <div className="col-span-3">
+                <select
+                  id="unit"
+                  name="unit"
+                  value={productForm.unit}
+                  onChange={handleInputChange}
+                  className={`col-span-3 flex h-10 w-full rounded-md border ${fieldErrors.unit ? 'border-red-500' : 'border-input'} bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50`}
+                  disabled={!!selectedProduct?.recipe_id}
+                >
+                  <option value="">Selecione a unidade</option>
+                  <option value="Kg">Kg</option>
+                  <option value="Lt">Lt</option>
+                  <option value="Un">Un</option>
+                  <option value="Gr">Gr</option>
+                </select>
+              </div>
+            </div>
+
             <div className="grid grid-cols-4 items-center gap-4">
               <label htmlFor="group" className="text-right font-medium">
                 Grupo
@@ -1090,7 +1108,6 @@ export default function Products() {
                 value={productForm.group_id || ''}
                 onChange={(e) => {
                   handleInputChange(e);
-                  // Reset subgroup if group changes
                   if (e.target.value !== productForm.group_id) {
                     setProductForm(prev => ({ ...prev, subgroup_id: null }));
                   }
@@ -1106,6 +1123,7 @@ export default function Products() {
                 ))}
               </select>
             </div>
+
             <div className="grid grid-cols-4 items-center gap-4">
               <label htmlFor="subgroup" className="text-right font-medium">
                 Subgrupo
@@ -1128,6 +1146,7 @@ export default function Products() {
                   ))}
               </select>
             </div>
+
             <div className="grid grid-cols-4 items-center gap-4">
               <label htmlFor="sku" className="text-right font-medium">
                 SKU
@@ -1158,6 +1177,7 @@ export default function Products() {
                 placeholder="Digite o código/SKU do produto"
               />
             </div>
+
             <div className="grid grid-cols-4 items-center gap-4">
               <label htmlFor="supplier" className="text-right font-medium">
                 Fornecedor
@@ -1171,21 +1191,57 @@ export default function Products() {
                 disabled={!!selectedProduct?.recipe_id}
               />
             </div>
+
+            {productForm.unit === 'Un' ? (
+              <div className="grid grid-cols-4 items-center gap-4">
+                <label htmlFor="unit_weight" className="text-right font-medium">
+                  Peso da Unidade
+                </label>
+                <Input
+                  id="unit_weight"
+                  name="unit_weight"
+                  type="text"
+                  inputMode="decimal"
+                  value={productForm.unit_weight !== null ? formatInputDecimalBR(productForm.unit_weight, 3) : ''}
+                  onChange={handleInputChange}
+                  className="col-span-3"
+                  disabled={!!selectedProduct?.recipe_id}
+                />
+              </div>
+            ) : (
+              <div className="grid grid-cols-4 items-center gap-4">
+                <label htmlFor="kg_weight" className="text-right font-medium">
+                  Peso do Kg
+                </label>
+                <Input
+                  id="kg_weight"
+                  name="kg_weight"
+                  type="text"
+                  inputMode="decimal"
+                  value={productForm.kg_weight !== null ? formatInputDecimalBR(productForm.kg_weight, 3) : ''}
+                  onChange={handleInputChange}
+                  className="col-span-3"
+                  disabled={!!selectedProduct?.recipe_id}
+                />
+              </div>
+            )}
+
             <div className="grid grid-cols-4 items-center gap-4">
               <label htmlFor="cost" className="text-right font-medium">
-                Custo por Kg
+                Custo por {productForm.unit}
               </label>
               <Input
                 id="cost"
                 name="cost"
-                type="number"
-                step="0.01"
+                type="text"
+                inputMode="decimal"
                 value={productForm.cost || ''}
                 onChange={handleInputChange}
                 className="col-span-3"
                 disabled={!!selectedProduct?.recipe_id}
               />
             </div>
+
             <div className="grid grid-cols-4 items-center gap-4">
               <label htmlFor="unit_price" className="text-right font-medium">
                 Preço por Un
@@ -1193,14 +1249,15 @@ export default function Products() {
               <Input
                 id="unit_price"
                 name="unit_price"
-                type="number"
-                step="0.01"
+                type="text"
+                inputMode="decimal"
                 value={productForm.unit_price || ''}
                 onChange={handleInputChange}
                 className="col-span-3"
                 disabled={!!selectedProduct?.recipe_id}
               />
             </div>
+
             <div className="grid grid-cols-4 items-center gap-4">
               <label htmlFor="min_stock" className="text-right font-medium">
                 Estoque Mínimo
@@ -1215,6 +1272,7 @@ export default function Products() {
                 className="col-span-3"
               />
             </div>
+
             <div className="grid grid-cols-4 items-center gap-4">
               <label htmlFor="current_stock" className="text-right font-medium">
                 Estoque Atual
@@ -1229,6 +1287,7 @@ export default function Products() {
                 className="col-span-3"
               />
             </div>
+
             <div className="grid grid-cols-4 items-center gap-4 align-top">
               <label className="text-right font-medium pt-1">
                 Dias de Produção
