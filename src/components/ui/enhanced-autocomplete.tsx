@@ -159,6 +159,18 @@ export function EnhancedAutocomplete({
     }
   };
 
+  // 1. Adicionar a função getFontSize para resolver o erro de compilação
+  const getFontSize = () => {
+    switch (size) {
+      case 'lg':
+        return 'text-base';
+      case 'xl':
+        return 'text-lg';
+      default:
+        return 'text-sm';
+    }
+  };
+
   return (
     <div className="relative w-full">
       {label && (
@@ -190,6 +202,7 @@ export function EnhancedAutocomplete({
         </div>
       )}
       
+      {/* 2. Adicionar a função getFontSize na lista de sugestões */}
       {showSuggestions && filteredSuggestions.length > 0 && (
         <ul
           ref={suggestionsRef}
@@ -201,7 +214,7 @@ export function EnhancedAutocomplete({
               onClick={() => handleClick(suggestion)}
               className={cn(
                 "cursor-pointer select-none relative py-3 pl-4 pr-9 text-gray-900 hover:bg-gray-100",
-                getFontSize(),
+                getFontSize(), // 3. Usar a função getFontSize para o tamanho do texto
                 index === activeSuggestionIndex && "bg-gray-100"
               )}
             >
