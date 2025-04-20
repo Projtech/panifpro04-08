@@ -252,9 +252,10 @@ export type Database = {
           sku: string | null
           subgroup_id: string | null
           sunday: boolean | null
-          supplier: string
+          supplier: string | null
           thursday: boolean | null
           tuesday: boolean | null
+          type: Database["public"]["Enums"]["product_type"] | null
           unit: string
           unit_price: number | null
           unit_weight: number | null
@@ -277,9 +278,10 @@ export type Database = {
           sku?: string | null
           subgroup_id?: string | null
           sunday?: boolean | null
-          supplier: string
+          supplier?: string | null
           thursday?: boolean | null
           tuesday?: boolean | null
+          type?: Database["public"]["Enums"]["product_type"] | null
           unit: string
           unit_price?: number | null
           unit_weight?: number | null
@@ -302,9 +304,10 @@ export type Database = {
           sku?: string | null
           subgroup_id?: string | null
           sunday?: boolean | null
-          supplier?: string
+          supplier?: string | null
           thursday?: boolean | null
           tuesday?: boolean | null
+          type?: Database["public"]["Enums"]["product_type"] | null
           unit?: string
           unit_price?: number | null
           unit_weight?: number | null
@@ -532,9 +535,10 @@ export type Database = {
           sku: string | null
           subgroup_id: string | null
           sunday: boolean | null
-          supplier: string
+          supplier: string | null
           thursday: boolean | null
           tuesday: boolean | null
+          type: Database["public"]["Enums"]["product_type"] | null
           unit: string
           unit_price: number | null
           unit_weight: number | null
@@ -543,7 +547,7 @@ export type Database = {
       }
     }
     Enums: {
-      [_ in never]: never
+      product_type: "materia_prima" | "embalagem" | "subproduto" | "decoracao"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -658,6 +662,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      product_type: ["materia_prima", "embalagem", "subproduto", "decoracao"],
+    },
   },
 } as const

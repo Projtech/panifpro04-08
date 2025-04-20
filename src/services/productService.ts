@@ -1,30 +1,32 @@
-
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+
+export type ProductType = 'materia_prima' | 'embalagem' | 'subproduto' | 'decoracao';
 
 export interface Product {
   id: string;
   name: string;
   unit: string;
-  sku: string; // Removido o null para garantir que sempre seja string
-  supplier: string;
+  sku: string | null;
+  supplier: string | null;
   cost: number | null;
   min_stock: number;
   current_stock: number | null;
   recipe_id?: string | null;
   unit_price?: number | null;
-  unit_weight?: number | null; // Peso da unidade
-  kg_weight?: number | null;   // Peso do kg
-  group_id?: string | null;    // ID do grupo
-  subgroup_id?: string | null; // ID do subgrupo
-  all_days?: boolean | null;   // Checkbox para todos os dias
-  monday?: boolean | null;     // Checkbox para segunda-feira
-  tuesday?: boolean | null;    // Checkbox para terça-feira
-  wednesday?: boolean | null;  // Checkbox para quarta-feira
-  thursday?: boolean | null;   // Checkbox para quinta-feira
-  friday?: boolean | null;     // Checkbox para sexta-feira
-  saturday?: boolean | null;   // Checkbox para sábado
-  sunday?: boolean | null;     // Checkbox para domingo
+  unit_weight?: number | null;
+  kg_weight?: number | null;
+  group_id?: string | null;
+  subgroup_id?: string | null;
+  type?: ProductType | null;
+  all_days?: boolean | null;
+  monday?: boolean | null;
+  tuesday?: boolean | null;
+  wednesday?: boolean | null;
+  thursday?: boolean | null;
+  friday?: boolean | null;
+  saturday?: boolean | null;
+  sunday?: boolean | null;
 }
 
 export async function getProducts(): Promise<Product[]> {
@@ -112,6 +114,7 @@ export async function checkProductSkuExists(sku: string, excludeId?: string): Pr
   }
 }
 
+// Atualizar a função createProduct para refletir os novos campos não obrigatórios
 export async function createProduct(product: Omit<Product, 'id'>): Promise<Product | null> {
   console.log("[PRODUCTS] Creating new product:", product.name);
   try {
@@ -120,27 +123,12 @@ export async function createProduct(product: Omit<Product, 'id'>): Promise<Produ
       toast.error("Preencha todos os campos obrigatórios");
       return null;
     }
-    
-    // Se o produto está sendo criado a partir de uma receita, o SKU pode ser nulo
-    if (!product.recipe_id && !product.sku) {
-      toast.error("Preencha o campo SKU");
-      return null;
-    }
-    
+
     // Verificar se já existe um produto com o mesmo nome
     const nameExists = await checkProductNameExists(product.name);
     if (nameExists) {
       toast.error(`Já existe um produto com o nome "${product.name}". Escolha um nome diferente.`);
       return null;
-    }
-    
-    // Verificar se já existe um produto com o mesmo SKU
-    if (product.sku) {
-      const skuExists = await checkProductSkuExists(product.sku);
-      if (skuExists) {
-        toast.error(`Já existe um produto com o SKU "${product.sku}". Escolha um SKU diferente.`);
-        return null;
-      }
     }
 
     // Garantir que o campo cost tenha um valor válido
