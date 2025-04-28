@@ -9,6 +9,107 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      profiles: {
+        Row: {
+          id: string
+          full_name: string | null
+          force_password_change: boolean
+          company_id: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id: string
+          full_name?: string | null
+          force_password_change?: boolean
+          company_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          full_name?: string | null
+          force_password_change?: boolean
+          company_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profiles_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      companies: {
+        Row: {
+          id: string
+          name: string
+          logo_url: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          logo_url?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          logo_url?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      company_users: {
+        Row: {
+          id: string
+          company_id: string
+          user_id: string
+          role: string
+          status: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          company_id: string
+          user_id: string
+          role?: string
+          status?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          company_id?: string
+          user_id?: string
+          role?: string
+          status?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_users_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_users_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       groups: {
         Row: {
           created_at: string | null
@@ -547,7 +648,7 @@ export type Database = {
       }
     }
     Enums: {
-      product_type: "materia_prima" | "embalagem" | "subproduto" | "decoracao"
+      product_type: "materia_prima" | "embalagem" | "subreceita" | "decoracao"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -663,7 +764,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      product_type: ["materia_prima", "embalagem", "subproduto", "decoracao"],
+      product_type: ["materia_prima", "embalagem", "subreceita", "decoracao"],
     },
   },
 } as const

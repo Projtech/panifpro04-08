@@ -7,12 +7,14 @@ interface RecipeItemProps {
   orderRecipe: OrderRecipe;
   onRemove: (id: string) => void;
   isViewOnly: boolean;
+  onQuantityChange?: (id: string, value: number, field: 'kg' | 'un') => void;
 }
 
 export default function RecipeItem({ 
   orderRecipe, 
   onRemove, 
-  isViewOnly 
+  isViewOnly, 
+  onQuantityChange
 }: RecipeItemProps) {
   return (
     <tr className={orderRecipe.fromCalendar ? "bg-amber-50 border-l-4 border-amber-500" : ""}>
@@ -25,16 +27,44 @@ export default function RecipeItem({
         {orderRecipe.recipeName}
       </td>
       <td className="p-4">
-        {orderRecipe.unit === 'kg' 
-          ? <span className="font-semibold">{orderRecipe.quantity.toFixed(2)} kg</span>
-          : <span>{orderRecipe.convertedQuantity.toFixed(2)} kg</span>
-        }
+        {isViewOnly ? (
+          orderRecipe.unit === 'kg' 
+            ? <span className="font-semibold">{orderRecipe.quantity.toFixed(2)} kg</span>
+            : <span>{orderRecipe.convertedQuantity.toFixed(2)} kg</span>
+        ) : (
+          orderRecipe.unit === 'kg' ? (
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              className="form-input w-20"
+              value={orderRecipe.quantity}
+              onChange={e => onQuantityChange && onQuantityChange(orderRecipe.id, parseFloat(e.target.value), 'kg')}
+            />
+          ) : (
+            <span>{orderRecipe.convertedQuantity.toFixed(2)} kg</span>
+          )
+        )}
       </td>
       <td className="p-4">
-        {orderRecipe.unit === 'un' 
-          ? <span className="font-semibold">{orderRecipe.quantity.toFixed(0)} un</span>
-          : <span>{orderRecipe.convertedQuantity.toFixed(0)} un</span>
-        }
+        {isViewOnly ? (
+          orderRecipe.unit === 'un' 
+            ? <span className="font-semibold">{orderRecipe.quantity.toFixed(0)} un</span>
+            : <span>{orderRecipe.convertedQuantity.toFixed(0)} un</span>
+        ) : (
+          orderRecipe.unit === 'un' ? (
+            <input
+              type="number"
+              step="1"
+              min="0"
+              className="form-input w-20"
+              value={orderRecipe.quantity}
+              onChange={e => onQuantityChange && onQuantityChange(orderRecipe.id, parseInt(e.target.value), 'un')}
+            />
+          ) : (
+            <span>{orderRecipe.convertedQuantity.toFixed(0)} un</span>
+          )
+        )}
       </td>
       {!isViewOnly && (
         <td className="p-4 w-16">

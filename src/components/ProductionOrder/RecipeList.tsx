@@ -7,12 +7,14 @@ interface RecipeListProps {
   orderRecipes: OrderRecipe[];
   onRemoveRecipe: (id: string) => void;
   isViewOnly: boolean;
+  onQuantityChange?: (id: string, value: number, field: 'kg' | 'un') => void;
 }
 
 export default function RecipeList({ 
   orderRecipes, 
   onRemoveRecipe, 
-  isViewOnly 
+  isViewOnly, 
+  onQuantityChange
 }: RecipeListProps) {
   return (
     <div className="overflow-x-auto">
@@ -33,6 +35,7 @@ export default function RecipeList({
                 orderRecipe={orderRecipe}
                 onRemove={onRemoveRecipe}
                 isViewOnly={isViewOnly}
+                onQuantityChange={onQuantityChange}
               />
             ))
           ) : (

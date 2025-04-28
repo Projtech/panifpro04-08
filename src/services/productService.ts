@@ -2,8 +2,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { parseDecimalBR } from "@/lib/numberUtils";
 
-export type ProductType = 'materia_prima' | 'embalagem' | 'subproduto' | 'decoracao';
+export type ProductType = 'materia_prima' | 'embalagem' | 'subreceita' | 'decoracao';
 
+// Ajustando interface para usar product_type consistentemente
 export interface Product {
   id: string;
   name: string;
@@ -11,7 +12,7 @@ export interface Product {
   sku: string | null;
   supplier: string | null;
   cost: number | null;
-  min_stock: number;
+  min_stock: number | null; // Permitir null conforme lógica de negócio
   current_stock: number | null;
   recipe_id?: string | null;
   unit_price?: number | null;
@@ -19,7 +20,7 @@ export interface Product {
   kg_weight?: number | null;
   group_id?: string | null;
   subgroup_id?: string | null;
-  type?: ProductType | null;
+  product_type?: string | null; // Usar este campo (TEXT)
   all_days?: boolean | null;
   monday?: boolean | null;
   tuesday?: boolean | null;
@@ -31,26 +32,40 @@ export interface Product {
 }
 
 function validateProduct(product: Omit<Product, 'id'>): string | null {
-  if (!product.name || !product.unit) {
-    return "Preencha os campos obrigatórios: nome e unidade";
+  // Ajustar validação para campos realmente obrigatórios
+  if (!product.name) {
+    return "Nome é obrigatório";
+  }
+  // Unit e Cost são NOT NULL no DB, mas podem ser calculados/definidos
+  // A validação deles pode ser mais complexa dependendo do tipo
+  if (!product.unit && product.product_type !== 'materia_prima') {
+    // Matéria prima terá unit 'Kg' setado, outros tipos precisam de unidade
+    return "Unidade é obrigatória para este tipo de produto";
   }
 
-  if (product.unit.toLowerCase() === 'kg') {
-    if (!product.kg_weight || product.kg_weight <= 0) {
-      return "Para produtos em kg, informe o peso em kg";
+  // Validação de peso só se NÃO for matéria prima
+  if (product.product_type !== 'materia_prima') {
+    if (product.unit?.toLowerCase() === 'kg') { // Adicionado '?' para segurança
+      if (!product.kg_weight || product.kg_weight <= 0) {
+        // Este erro não deve mais aparecer para matéria prima
+        return "Para produtos em kg, informe o preço por kg (R$)";
+      }
+    } else { // Assume 'un' ou outro se não for 'kg'
+      if (!product.unit_weight || product.unit_weight <= 0) {
+        return "Para produtos em unidades, informe o peso por unidade (kg)";
+      }
     }
-  } else {
-    if (!product.unit_weight || product.unit_weight <= 0) {
-      return "Para produtos em unidades, informe o peso por unidade";
-    }
   }
 
-  if (product.cost === null || product.cost < 0) {
-    return "O custo não pode ser negativo";
+  // Custo é NOT NULL no DB. Precisa ter valor.
+  if (product.cost === null || product.cost === undefined || product.cost < 0) {
+    return "O custo não pode ser nulo ou negativo";
   }
 
+  // min_stock é NOT NULL no DB, mas opcional na UI. Enviaremos 0 se não informado.
   if (product.min_stock === null || product.min_stock < 0) {
-    return "O estoque mínimo não pode ser negativo";
+    // Não retornar erro aqui, pois vamos tratar no productToCreate
+    // return "O estoque mínimo não pode ser negativo";
   }
 
   return null;
@@ -81,14 +96,31 @@ export async function getProduct(id: string): Promise<Product | null> {
       .from('products')
       .select('*')
       .eq('id', id)
-      .single();
-    
+      .maybeSingle();
     if (error) throw error;
-    console.log(`[PRODUCTS] Successfully fetched product: ${data?.name || id}`);
-    return data;
+    return data || null;
   } catch (error) {
     console.error(`[PRODUCTS] Error fetching product with ID ${id}:`, error);
-    toast.error("Erro ao carregar produto");
+    return null;
+  }
+}
+
+// Busca produto pelo nome e tipo (materia_prima, subreceita, receita)
+export async function findProductByNameAndType(
+  name: string,
+  type: ProductType
+): Promise<Product | null> {
+  try {
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .eq('name', name)
+      .eq('product_type', type)
+      .maybeSingle();
+    if (error) throw error;
+    return data || null;
+  } catch (error) {
+    console.error(`[PRODUCTS] Error finding product by name and type:`, error);
     return null;
   }
 }
@@ -138,6 +170,10 @@ export async function checkProductSkuExists(sku: string, excludeId?: string): Pr
 }
 
 export async function createProduct(productData: Omit<Product, 'id'>): Promise<Product | null> {
+  // Proteção extra: remova campo 'type' se existir
+  if ('type' in productData) {
+    delete (productData as any).type;
+  }
   console.log("[PRODUCTS] Creating new product:", productData.name);
   try {
     const validationError = validateProduct(productData);
@@ -161,12 +197,15 @@ export async function createProduct(productData: Omit<Product, 'id'>): Promise<P
     }
 
     const productToCreate = {
+      // Usar productData que já deve ter product_type
       ...productData,
-      cost: productData.cost || 0,
-      min_stock: productData.min_stock || 0,
-      current_stock: productData.current_stock || 0,
-      unit_price: productData.unit_price || 0,
-      type: productData.type || 'materia_prima'
+      // Garantir valores padrão para campos NOT NULL ou com defaults no DB
+      // se productData não os tiver ou forem undefined/null
+      cost: productData.cost ?? 0, // Custo é NOT NULL
+      min_stock: productData.min_stock ?? 0, // min_stock é NOT NULL
+      current_stock: productData.current_stock ?? 0,
+      unit_price: productData.unit_price ?? 0,
+      product_type: productData.product_type // Assumindo que productData tem product_type
     };
 
     const { data, error } = await supabase
@@ -179,14 +218,20 @@ export async function createProduct(productData: Omit<Product, 'id'>): Promise<P
     console.log(`[PRODUCTS] Successfully created product: ${data.name} with ID: ${data.id}`);
     toast.success("Produto criado com sucesso");
     return data;
-  } catch (error) {
+  } catch (error: any) {
     console.error("[PRODUCTS] Error creating product:", error);
+    // Log do erro bruto vindo do Supabase
+    console.error("[PRODUCTS] Raw Supabase Error:", JSON.stringify(error, null, 2));
     toast.error("Erro ao criar produto");
     return null;
   }
 }
 
 export async function updateProduct(id: string, productData: Partial<Product>): Promise<Product | null> {
+  // Proteção extra: remova campo 'type' se existir
+  if ('type' in productData) {
+    delete (productData as any).type;
+  }
   console.log(`[PRODUCTS] Updating product ${id}:`, productData);
   try {
     const currentProduct = await getProduct(id);
@@ -271,4 +316,19 @@ export async function deleteProduct(id: string): Promise<boolean> {
     toast.error("Erro ao excluir produto");
     return false;
   }
+}
+
+// Busca produtos com nomes semelhantes (início, meio ou fim, case insensitive)
+export async function findSimilarProductsByName(name: string): Promise<Product[]> {
+  const { data, error } = await supabase
+    .from('products')
+    .select('*')
+    .ilike('name', `%${name}%`); // Usa ilike para case-insensitive e % para wildcard
+
+  if (error) {
+    console.error('[findSimilarProductsByName] Erro ao buscar produtos semelhantes:', error);
+    toast.error("Erro ao buscar produtos semelhantes"); // Mensagem para o usuário
+    return [];
+  }
+  return data || []; // Retorna os dados ou array vazio se data for null/undefined
 }

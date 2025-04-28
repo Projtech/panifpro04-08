@@ -152,6 +152,13 @@ export default function RecipeManager({
           orderRecipes={orderRecipes} 
           onRemoveRecipe={removeRecipe} 
           isViewOnly={isViewOnly} 
+          onQuantityChange={(id, value, field) => {
+            setOrderRecipes(orderRecipes => orderRecipes.map(r =>
+              r.id === id
+                ? { ...r, quantity: field === 'kg' || field === 'un' ? value : r.quantity }
+                : r
+            ));
+          }}
         />
       </div>
     </Card>

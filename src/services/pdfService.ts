@@ -81,7 +81,7 @@ export async function generateRecipePdf(recipeId: string, type: PdfType): Promis
       
       if (ingredients.length > 0) {
         const tableData = ingredients.map(ing => [
-          ing.is_sub_recipe ? "Subproduto" : "Matéria Prima",
+          ing.is_sub_recipe ? "SubReceita" : "Matéria Prima",
           ing.is_sub_recipe ? (ing.sub_recipe ? ing.sub_recipe.name : "Sub-receita") 
                             : (ing.product ? ing.product.name : "Produto"),
           `${ing.quantity.toFixed(2)} ${ing.unit}`,

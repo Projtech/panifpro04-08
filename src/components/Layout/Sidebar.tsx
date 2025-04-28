@@ -1,6 +1,7 @@
 
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
 import { 
   BookOpen, 
   Package, 
@@ -11,7 +12,8 @@ import {
   ChevronRight,
   Home,
   Calendar,
-  FolderTree
+  FolderTree,
+  Users
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -61,6 +63,7 @@ const menuItems = [
 export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
+  const { isAdmin } = useAuth();
 
   return (
     <div
@@ -103,6 +106,25 @@ export default function Sidebar() {
               {!collapsed && <span>{item.title}</span>}
             </Link>
           ))}
+          
+          {/* Link de Gerenciamento de Usuários - Apenas para administradores */}
+          {isAdmin && (
+            <Link
+              to="/users"
+              className={cn(
+                "flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors",
+                location.pathname === "/users"
+                  ? "bg-bakery-amber text-white"
+                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-white"
+              )}
+            >
+              <Users
+                className={cn("flex-shrink-0", collapsed ? "mx-auto" : "mr-3")}
+                size={20}
+              />
+              {!collapsed && <span>Gerenciar Usuários</span>}
+            </Link>
+          )}
         </nav>
       </div>
     </div>

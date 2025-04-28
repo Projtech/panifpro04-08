@@ -297,6 +297,6 @@ export default function useProductionOrder({ id, calendarItems, calendarDate }: 
     handleSave,
     handleStatusUpdate,
     isEditing: !!id,
-    isViewOnly: !!id && orderStatus === 'completed'
+    isViewOnly: !!id ? orderStatus === 'completed' : false
   };
 }

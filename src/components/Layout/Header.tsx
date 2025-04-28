@@ -1,7 +1,40 @@
 
 import { useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Bell, User } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+
+function UserSessionInfo() {
+  const { user, activeCompany, signOut } = useAuth();
+  const navigate = useNavigate();
+  if (!user) return null;
+
+  // Tenta pegar display_name, senão pega name do metadata, senão email
+  const displayName = user.user_metadata?.display_name || user.user_metadata?.name || user.email;
+  const companyName = activeCompany?.name || "-";
+
+  const handleLogout = async () => {
+    await signOut();
+    navigate('/login');
+    window.location.reload(); // Força reload para garantir que todo o estado seja limpo
+  };
+
+
+  return (
+    <div className="flex items-center space-x-3">
+      <span className="text-xs text-gray-600">
+        Usuário: <span className="font-semibold">{displayName}</span> |
+        Empresa: <span className="font-semibold">{companyName}</span>
+      </span>
+      <button
+        onClick={handleLogout}
+        className="ml-2 px-3 py-1 rounded bg-bakery-alert text-white text-xs font-semibold hover:bg-bakery-brown transition"
+      >
+        Sair
+      </button>
+    </div>
+  );
+}
 
 export default function Header() {
   const location = useLocation();
@@ -32,13 +65,8 @@ export default function Header() {
             </span>
           )}
         </div>
-        
-        <div className="flex items-center space-x-2">
-          <div className="h-8 w-8 rounded-full bg-bakery-amber flex items-center justify-center text-white">
-            <User className="h-5 w-5" />
-          </div>
-          <span className="text-sm font-medium text-gray-700">Admin</span>
-        </div>
+        {/* Seção de usuário/empresa/logoff */}
+        <UserSessionInfo />
       </div>
     </div>
   );

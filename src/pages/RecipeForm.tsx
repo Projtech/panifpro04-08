@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { parseDecimalBR } from "@/lib/numberUtils";
 import { useNavigate, useParams } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -34,7 +35,15 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { getProducts, Product } from "@/services/productService";
-import { getRecipes, getRecipeWithIngredients, createRecipe, updateRecipe, Recipe, RecipeIngredient } from "@/services/recipeService";
+import { 
+  getRecipes, 
+  getRecipeWithIngredients, 
+  createRecipe, 
+  updateRecipe, 
+  Recipe, 
+  RecipeIngredient, 
+  checkRecipeNameExists // Adicionar importação
+} from "@/services/recipeService";
 import { getGroups, getSubgroups, Group, Subgroup } from "@/services/groupService";
 
 interface Ingredient {
@@ -47,9 +56,33 @@ interface Ingredient {
   unit: string;
   cost: number;
   totalCost: number;
+  etapa: string | null;
 }
 
 export default function RecipeForm() {
+  // ... outros hooks e estados
+
+  // Novo: tipo do produto gerado por receita
+  const [productTypeForForm, setProductTypeForForm] = useState<'receita' | 'subreceita'>('receita');
+
+  function moveIngredientUp(idx: number) {
+    setIngredients(prev => {
+      if (idx <= 0) return prev;
+      const newArr = [...prev];
+      [newArr[idx - 1], newArr[idx]] = [newArr[idx], newArr[idx - 1]];
+      return newArr;
+    });
+  }
+
+  function moveIngredientDown(idx: number) {
+    setIngredients(prev => {
+      if (idx >= prev.length - 1) return prev;
+      const newArr = [...prev];
+      [newArr[idx], newArr[idx + 1]] = [newArr[idx + 1], newArr[idx]];
+      return newArr;
+    });
+  }
+
   const { id } = useParams();
   const isEditing = !!id;
   
@@ -66,22 +99,24 @@ export default function RecipeForm() {
   const [recipeForm, setRecipeForm] = useState({
     name: '',
     code: '',
-    yieldKg: 0,
+    yieldKg: '', // Mantido como string
     yieldUnits: 0,
     instructions: '',
     photoUrl: '',
     gifUrl: '',
     isSubProduct: false,
     group_id: null as string | null,
-    subgroup_id: null as string | null
+    subgroup_id: null as string | null,
+    finalUnit: 'UN' as 'UN' | 'KG', // Unidade final do produto gerado
   });
   
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
-  const [newIngredient, setNewIngredient] = useState<Partial<Ingredient>>({
+  const [newIngredient, setNewIngredient] = useState<Partial<Omit<Ingredient, 'quantity'>> & { quantity: string }>({
     productId: null,
     subRecipeId: null,
     isSubRecipe: false,
-    quantity: 0
+    quantity: '', // Mantido como string
+    etapa: null,
   });
   
   const navigate = useNavigate();
@@ -106,21 +141,24 @@ export default function RecipeForm() {
         if (isEditing && id) {
           const { recipe, ingredients: recipeIngredients } = await getRecipeWithIngredients(id);
           if (recipe) {
+            // Definir tipo do produto gerado
+            setProductTypeForForm(recipe.code === 'SUB' ? 'subreceita' : 'receita');
             // Load recipe details
             setRecipeForm({
               name: recipe.name,
               code: recipe.code || '',
-              yieldKg: recipe.yield_kg,
+              yieldKg: recipe.yield_kg?.toString().replace('.', ',') || '', // Converter número do backend para string com vírgula
               yieldUnits: recipe.yield_units || 0,
               instructions: recipe.instructions || '',
               photoUrl: recipe.photo_url || '',
               gifUrl: recipe.gif_url || '',
               isSubProduct: recipe.code === 'SUB',
               group_id: recipe.group_id,
-              subgroup_id: recipe.subgroup_id
+              subgroup_id: recipe.subgroup_id,
+              finalUnit: (recipe.yield_units && recipe.yield_units > 0) ? 'UN' : 'KG',
             });
             
-            // Transform ingredients to match our state structure
+            // Transform ingredients to match our front-end ingredient structure
             const formattedIngredients = recipeIngredients.map(ing => ({
               id: ing.id || `temp-${Date.now()}-${Math.random()}`,
               productId: ing.is_sub_recipe ? null : ing.product_id,
@@ -132,7 +170,8 @@ export default function RecipeForm() {
               quantity: ing.quantity,
               unit: ing.unit,
               cost: ing.cost,
-              totalCost: ing.total_cost
+              totalCost: ing.total_cost,
+              etapa: ing.etapa,
             }));
             
             setIngredients(formattedIngredients);
@@ -148,13 +187,19 @@ export default function RecipeForm() {
         setLoading(false);
       }
     };
+
+    // Definir tipo padrão ao criar nova receita
+    if (!isEditing) {
+      setProductTypeForForm('receita');
+    }
     
     fetchData();
   }, [id, isEditing, navigate]);
   
   // Calculate total cost and costs per kg/unit
   const totalIngredientsCost = ingredients.reduce((sum, ing) => sum + ing.totalCost, 0);
-  const costPerKg = recipeForm.yieldKg > 0 ? totalIngredientsCost / recipeForm.yieldKg : 0;
+  const yieldKgForDisplay = parseDecimalBR(recipeForm.yieldKg); // Parse string para display
+  const costPerKg = (yieldKgForDisplay && yieldKgForDisplay > 0) ? totalIngredientsCost / yieldKgForDisplay : 0;
   const costPerUnit = recipeForm.yieldUnits > 0 ? totalIngredientsCost / recipeForm.yieldUnits : 0;
   
   // Filtrar subgrupos com base no grupo selecionado
@@ -178,11 +223,11 @@ export default function RecipeForm() {
   
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
+    // Apenas atualiza o estado com o valor string do input
+    // A conversão/validação será feita no handleSave
     setRecipeForm(prev => ({ 
       ...prev, 
-      [name]: name === 'yieldKg' || name === 'yieldUnits' 
-        ? parseFloat(value) || 0 
-        : value 
+      [name]: value
     }));
   };
 
@@ -196,19 +241,23 @@ export default function RecipeForm() {
   
   const handleIngredientChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
+    // Apenas atualiza o estado com o valor string do input
+    // A conversão/validação será feita no addIngredient
     setNewIngredient(prev => ({ 
       ...prev, 
-      [name]: name === 'quantity' ? parseFloat(value) || 0 : value 
+      [name]: value
     }));
   };
 
+
   const handleProductTypeChange = (type: string) => {
-    // Reset product and sub-recipe selections
+    // Reset product and sub-recipe selections, mas mantém etapa!
     setNewIngredient(prev => ({
       ...prev,
       productId: null,
       subRecipeId: null,
-      isSubRecipe: type === 'sub-product'
+      isSubRecipe: type === 'sub-product',
+      // etapa: prev.etapa // mantém o valor já escolhido
     }));
   };
   
@@ -218,16 +267,17 @@ export default function RecipeForm() {
     const product = products.find(p => p.id === productId);
     
     if (product) {
-      setNewIngredient({
-        ...newIngredient,
+      setNewIngredient(prev => ({
+        ...prev,
         productId,
         isSubRecipe: false,
         subRecipeId: null,
         productName: product.name,
         unit: product.unit,
         cost: product.cost || 0,
-        quantity: newIngredient.quantity || 0
-      });
+        // etapa: prev.etapa // mantém o valor já escolhido
+        quantity: '' // Resetar para string vazia ao selecionar produto
+      }));
     }
   };
   
@@ -237,30 +287,41 @@ export default function RecipeForm() {
     const subRecipe = subRecipes.find(r => r.id === subRecipeId);
     
     if (subRecipe) {
-      setNewIngredient({
-        ...newIngredient,
+      setNewIngredient(prev => ({
+        ...prev,
         subRecipeId,
         isSubRecipe: true,
         productId: null,
         productName: subRecipe.name,
         unit: 'kg',
         cost: subRecipe.cost_per_kg || 0,
-        quantity: newIngredient.quantity || 0
-      });
+        // etapa: prev.etapa // mantém o valor já escolhido
+        quantity: '' // Resetar para string vazia ao selecionar subreceita
+      }));
     }
   };
   
   const addIngredient = () => {
-    if (
-      (!newIngredient.productId && !newIngredient.subRecipeId) || 
-      !newIngredient.quantity ||
-      newIngredient.quantity <= 0
-    ) {
-      toast.error("Selecione um produto ou sub-receita e informe a quantidade.");
+    // Validar seleção de produto/subreceita
+    if (!newIngredient.productId && !newIngredient.subRecipeId) {
+      toast.error("Selecione um produto ou sub-receita.");
       return;
     }
     
-    const totalCost = (newIngredient.cost || 0) * (newIngredient.quantity || 0);
+    // Validar e converter quantidade
+    const quantityStr = newIngredient.quantity; // Já é string
+    const quantityNum = parseDecimalBR(quantityStr);
+
+    if (quantityNum === null || isNaN(quantityNum) || quantityNum <= 0) {
+      console.error(`Quantidade inválida digitada: '${quantityStr}'. Não foi possível converter para número ou é menor/igual a zero. Use formato brasileiro (ex: 0,75).`);
+      toast.error("Quantidade inválida. Use vírgula como separador (ex: 0,75) e deve ser maior que zero.");
+      // Poderíamos adicionar um highlight no campo aqui se necessário
+      return;
+    }
+    
+    // Se chegou aqui, a quantidade é válida (quantityNum)
+    
+    const totalCost = (newIngredient.cost || 0) * quantityNum; // Usar o número validado
     
     const ingredientToAdd: Ingredient = {
       id: `ing-${Date.now()}`,
@@ -268,10 +329,11 @@ export default function RecipeForm() {
       subRecipeId: newIngredient.subRecipeId || null,
       productName: newIngredient.productName!,
       isSubRecipe: newIngredient.isSubRecipe!,
-      quantity: newIngredient.quantity!,
+      quantity: quantityNum, // Usar o número validado
       unit: newIngredient.unit!,
       cost: newIngredient.cost!,
-      totalCost
+      totalCost,
+      etapa: newIngredient.etapa,
     };
     
     setIngredients([...ingredients, ingredientToAdd]);
@@ -281,7 +343,7 @@ export default function RecipeForm() {
       productId: null,
       subRecipeId: null,
       isSubRecipe: newIngredient.isSubRecipe,
-      quantity: 0
+      quantity: '' // Resetar para string vazia
     });
   };
   
@@ -302,7 +364,8 @@ export default function RecipeForm() {
       quantity: ing.quantity,
       unit: ing.unit,
       cost: ing.cost,
-      total_cost: ing.totalCost
+      total_cost: ing.totalCost,
+      etapa: ing.etapa,
     }));
   };
 
@@ -319,14 +382,19 @@ export default function RecipeForm() {
       newFieldErrors.name = true;
       hasError = true;
     }
-    if (!recipeForm.yieldKg || recipeForm.yieldKg <= 0) {
+    // Validar e converter Rendimento (kg)
+    const yieldKgStr = recipeForm.yieldKg; // Já é string
+    const yieldKgNum = parseDecimalBR(yieldKgStr);
+
+    if (yieldKgNum === null || isNaN(yieldKgNum) || yieldKgNum <= 0) {
       newFieldErrors.yieldKg = true;
       hasError = true;
+      console.error(`Rendimento (kg) inválido digitado: '${yieldKgStr}'. Não foi possível converter para número ou é menor/igual a zero. Use formato brasileiro (ex: 2,5).`);
     }
     
     if (hasError) {
       setFieldErrors(newFieldErrors);
-      toast.error("Preencha os campos obrigatórios: nome e rendimento em kg.");
+      toast.error("Verifique os campos obrigatórios ou inválidos. Use vírgula para decimais (ex: 2,5).");
       return;
     }
     
@@ -336,13 +404,36 @@ export default function RecipeForm() {
     }
     
     setLoading(true);
-    
+
+    // <<< INÍCIO DA LÓGICA DE VERIFICAÇÃO DE NOME DUPLICADO >>>
+    const nameToCheck = recipeForm.name.trim();
+    if (!nameToCheck) {
+      toast.error("O nome da receita não pode estar vazio.");
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const nameExists = await checkRecipeNameExists(nameToCheck, id); // Passa o ID atual, se houver (edição)
+      if (nameExists) {
+        toast.error(`Já existe uma receita com o nome "${nameToCheck}". Escolha outro nome.`);
+        setLoading(false);
+        return; // Interrompe o salvamento
+      }
+    } catch (error) {
+      console.error("Erro ao verificar nome da receita:", error);
+      toast.error("Erro ao verificar a disponibilidade do nome da receita. Tente novamente.");
+      setLoading(false);
+      return;
+    }
+    // <<< FIM DA LÓGICA DE VERIFICAÇÃO DE NOME DUPLICADO >>>
+
     try {
       // Format recipe data
-      const recipeData = {
+      const recipeData: Omit<Recipe, 'id' | 'created_at' | 'created_by'> = {
         name: recipeForm.name,
-        code: recipeForm.isSubProduct ? 'SUB' : recipeForm.code || null,
-        yield_kg: recipeForm.yieldKg,
+        code: recipeForm.isSubProduct ? 'SUB' : (recipeForm.code || null),
+        yield_kg: yieldKgNum!, // Usar o número validado!
         yield_units: recipeForm.yieldUnits || null,
         instructions: recipeForm.instructions || null,
         photo_url: recipeForm.photoUrl || null,
@@ -390,7 +481,8 @@ export default function RecipeForm() {
             quantity: ing.quantity,
             unit: ing.unit,
             cost: ing.cost,
-            total_cost: ing.totalCost
+            total_cost: ing.totalCost,
+            etapa: ing.etapa,
           };
           
           // Check if this is an existing ingredient (has a valid ID that exists in DB)
@@ -429,7 +521,64 @@ export default function RecipeForm() {
         result = await createRecipe(recipeData, formattedIngredients);
       }
       
-      if (result) {
+      if (result && result.id) {
+        // --- INTEGRAÇÃO PRODUTO/RECEITA ---
+        try {
+          const { createProduct, updateProduct, findProductByNameAndType } = await import('@/services/productService');
+          // Definir tipo do produto
+          const productType = recipeForm.isSubProduct ? 'subreceita' as import('@/services/productService').ProductType : 'receita' as import('@/services/productService').ProductType;
+          const finalUnit = recipeForm.isSubProduct ? 'KG' : recipeForm.finalUnit;
+          // Cálculo de custo e peso
+          const safeCostPerKg = costPerKg ?? 0;
+          const safeCostPerUnit = costPerUnit ?? 0;
+          const safeYieldKg = yieldKgNum ?? 0; // Usar o número validado aqui também
+          const safeYieldUnits = recipeForm.yieldUnits ?? 0;
+          let calculatedKgWeight = null;
+          if (safeYieldKg > 0 && safeYieldUnits > 0) {
+            calculatedKgWeight = safeYieldKg / safeYieldUnits;
+          }
+          // Montar payload
+          let productPayload = {
+            name: recipeForm.name,
+            product_type: productType, // Corrigido para o campo correto
+            group_id: recipeForm.group_id,
+            subgroup_id: recipeForm.subgroup_id,
+            recipe_id: result.id,
+            unit: finalUnit,
+            cost: finalUnit === 'KG' ? safeCostPerKg : safeCostPerUnit,
+            unit_weight: finalUnit === 'UN' ? calculatedKgWeight : null,
+            kg_weight: null, 
+            unit_price: null, // Pode ser calculado depois
+            min_stock: 0,
+            current_stock: null,
+            supplier: null,
+            sku: null,
+            code: null,
+            // Definir campos de dias da semana como false por padrão
+            all_days: false,
+            monday: false,
+            tuesday: false,
+            wednesday: false,
+            thursday: false,
+            friday: false,
+            saturday: false,
+            sunday: false
+          };
+
+          // Buscar produto existente
+          const existingProduct = await findProductByNameAndType(productPayload.name, productType); // product_type sempre usado para busca
+          if (existingProduct) {
+            await updateProduct(existingProduct.id, productPayload);
+            toast.info(`Produto '${productPayload.name}' atualizado.`);
+          } else {
+            await createProduct(productPayload);
+            toast.success(`Produto '${productPayload.name}' criado.`);
+          }
+        } catch (productError) {
+          console.error("Erro ao processar produto associado:", productError);
+          toast.error("Receita salva, mas houve erro ao criar/atualizar produto associado.");
+        }
+        // --- FIM INTEGRAÇÃO PRODUTO/RECEITA ---
         toast.success(isEditing ? "Receita atualizada com sucesso!" : "Receita criada com sucesso!");
         navigate('/recipes');
       }
@@ -455,9 +604,31 @@ export default function RecipeForm() {
         </Button>
         
         <div>
-          <h1 className="text-2xl font-bold text-bakery-brown">
-            {isEditing ? 'Editar Receita' : 'Nova Receita'}
-          </h1>
+          <h1 className="text-2xl font-bold mb-6 flex items-center gap-3">
+        {isEditing ? (
+          <><List className="w-6 h-6" /> Editar Receita</>
+        ) : (
+          <><Plus className="w-6 h-6" /> Nova Receita</>
+        )}
+      </h1>
+      {/* Dropdown de unidade do produto gerado (visível apenas se não for subreceita) */}
+      {!recipeForm.isSubProduct && (
+        <div className="mb-4">
+          <label htmlFor="finalUnit" className="block text-sm font-medium text-gray-700 mb-1">Unidade do Produto Gerado</label>
+          <Select
+            value={recipeForm.finalUnit}
+            onValueChange={(value: 'UN' | 'KG') => setRecipeForm(prev => ({ ...prev, finalUnit: value }))}
+          >
+            <SelectTrigger id="finalUnit">
+              <SelectValue placeholder="Selecione a unidade" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="UN">Unidade (UN)</SelectItem>
+              <SelectItem value="KG">Quilograma (KG)</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      )}
           <p className="text-gray-600">
             {isEditing ? 'Atualize os detalhes da receita' : 'Cadastre uma nova receita ou fórmula'}
           </p>
@@ -484,7 +655,7 @@ export default function RecipeForm() {
                         htmlFor="isSubProduct" 
                         className="text-sm font-medium leading-none cursor-pointer"
                       >
-                        É um Subproduto
+                        É um SubReceita
                       </label>
                     </div>
                   </div>
@@ -522,12 +693,11 @@ export default function RecipeForm() {
                   <Input
                     id="yieldKg"
                     name="yieldKg"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={recipeForm.yieldKg || ''}
+                    type="text" // Permitir qualquer caractere
+                    value={recipeForm.yieldKg} // Usar diretamente a string do estado
                     onChange={handleInputChange}
                     required
+                    placeholder="Ex: 2,5"
                     className={`form-input ${fieldErrors.yieldKg ? 'border-red-500 ring-red-500' : ''}`}
                   />
                 </div>
@@ -602,8 +772,29 @@ export default function RecipeForm() {
                 <div className="mb-6 border-b pb-6">
                   <h3 className="text-lg font-medium text-bakery-brown mb-4">Adicionar Ingrediente</h3>
                   
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                    <div className="space-y-2">
+                  <div className="flex flex-col md:flex-row gap-3 mb-4 items-end">
+                    {/* Etapa */}
+                    <div className="flex-1 min-w-[110px] max-w-[140px]">
+                      <label htmlFor="etapa" className="form-label">Etapa</label>
+                      <Select
+                        name="etapa"
+                        value={newIngredient.etapa ?? ''}
+                        onValueChange={value => setNewIngredient(prev => ({ ...prev, etapa: value }))}
+                      >
+                        <SelectTrigger className="form-input">
+                          <SelectValue placeholder="Selecione a etapa (opcional)" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="massa">Massa</SelectItem>
+                          <SelectItem value="recheio">Recheio</SelectItem>
+                          <SelectItem value="cobertura">Cobertura</SelectItem>
+                          <SelectItem value="finalizacao">Finalização</SelectItem>
+                          <SelectItem value="outro">Outro</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {/* Tipo */}
+                    <div className="flex-1 min-w-[110px] max-w-[140px]">
                       <label htmlFor="ingredientType" className="form-label">Tipo *</label>
                       <Select 
                         value={newIngredient.isSubRecipe ? 'sub-product' : 'raw-material'} 
@@ -614,22 +805,20 @@ export default function RecipeForm() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="raw-material">Matéria Prima</SelectItem>
-                          <SelectItem value="sub-product">Subproduto</SelectItem>
+                          <SelectItem value="sub-product">SubReceita</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
-                    
-                    <div className="space-y-2">
-                      <label htmlFor="productId" className="form-label">
-                        {newIngredient.isSubRecipe ? 'Subproduto *' : 'Ingrediente *'}
-                      </label>
+                    {/* Ingrediente */}
+                    <div className="flex-[2_2_0%] min-w-[200px] max-w-[420px]">
+                      <label htmlFor="productId" className="form-label">{newIngredient.isSubRecipe ? 'SubReceita *' : 'Ingrediente *'}</label>
                       {newIngredient.isSubRecipe ? (
                         <Select 
                           value={newIngredient.subRecipeId || ''} 
                           onValueChange={handleSubRecipeSelect}
                         >
                           <SelectTrigger className="form-input">
-                            <SelectValue placeholder="Selecione um subproduto" />
+                            <SelectValue placeholder="Selecione uma SubReceita" />
                           </SelectTrigger>
                           <SelectContent>
                             {subRecipes.length > 0 ? (
@@ -639,7 +828,7 @@ export default function RecipeForm() {
                                 </SelectItem>
                               ))
                             ) : (
-                              <SelectItem value="none" disabled>Nenhum subproduto disponível</SelectItem>
+                              <SelectItem value="none" disabled>Nenhuma SubReceita disponível</SelectItem>
                             )}
                           </SelectContent>
                         </Select>
@@ -649,39 +838,45 @@ export default function RecipeForm() {
                           onValueChange={handleProductSelect}
                         >
                           <SelectTrigger className="form-input">
-                            <SelectValue placeholder="Selecione um ingrediente" />
+                            <SelectValue placeholder="Selecione uma matéria prima" />
                           </SelectTrigger>
                           <SelectContent>
-                            {products.length > 0 ? (
-                              products.map(product => (
-                                <SelectItem key={product.id} value={product.id}>
-                                  {product.name} ({product.unit}) {product.cost ? `- R$ ${product.cost.toFixed(2)}` : ''}
-                                </SelectItem>
-                              ))
-                            ) : (
-                              <SelectItem value="none" disabled>Nenhum produto disponível</SelectItem>
-                            )}
+                            {(() => {
+                              const materiasPrimas = products.filter(p => p.product_type === 'materia_prima');
+                              if (materiasPrimas.length > 0) {
+                                return materiasPrimas.map(product => (
+                                  <SelectItem key={product.id} value={product.id}>
+                                    {product.name} ({product.unit}) {product.cost ? `- ${product.cost.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}` : ''}
+                                  </SelectItem>
+                                ));
+                              } else {
+                                return <SelectItem value="none" disabled>Nenhuma matéria prima disponível</SelectItem>;
+                              }
+                            })()}
                           </SelectContent>
                         </Select>
                       )}
                     </div>
-                    
-                    <div className="space-y-2">
+                    {/* Quantidade */}
+                    <div className="flex-1 min-w-[110px] max-w-[160px]">
                       <label htmlFor="quantity" className="form-label">Quantidade *</label>
                       <Input
                         id="quantity"
                         name="quantity"
-                        type="number"
-                        step="0.01"
-                        min="0"
+                        type="text"
                         value={newIngredient.quantity || ''}
                         onChange={handleIngredientChange}
-                        className="form-input"
-                        placeholder="0.00"
+                        placeholder="Ex: 0,750"
+                        className={`form-input ${fieldErrors.quantity ? 'border-red-500 ring-red-500' : ''}`}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault(); // evita submit do form
+                            addIngredient();
+                          }
+                        }}
                       />
                     </div>
                   </div>
-                  
                   <div className="flex justify-end">
                     <Button 
                       onClick={addIngredient} 
@@ -706,31 +901,54 @@ export default function RecipeForm() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Ingrediente</TableHead>
-                        <TableHead>Tipo</TableHead>
-                        <TableHead>Quantidade</TableHead>
-                        <TableHead>Un.</TableHead>
-                        <TableHead>Custo Unit.</TableHead>
-                        <TableHead>Custo Total</TableHead>
+                        <TableHead style={{ width: '15ch', minWidth: '10ch' }}>Etapa</TableHead>
+                        <TableHead style={{ width: '15ch', minWidth: '10ch' }}>Tipo</TableHead>
+                        <TableHead style={{ minWidth: '180px' }}>Ingrediente</TableHead>
+                        <TableHead style={{ width: '10ch', minWidth: '8ch' }}>Qtd.</TableHead>
+                        <TableHead style={{ width: '8ch' }}>Un.</TableHead>
+                        <TableHead style={{ width: '10ch' }}>Custo Unit.</TableHead>
+                        <TableHead style={{ width: '12ch' }}>Custo Total</TableHead>
                         <TableHead className="w-16"></TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {ingredients.length > 0 ? (
-                        ingredients.map((ing) => (
+                        ingredients.map((ing, idx) => (
                           <TableRow key={ing.id}>
-                            <TableCell className="font-medium">{ing.productName}</TableCell>
-                            <TableCell>{ing.isSubRecipe ? 'Subproduto' : 'Matéria Prima'}</TableCell>
-                            <TableCell>{ing.quantity.toFixed(2)}</TableCell>
+                            <TableCell className="truncate" title={ing.etapa || ''}>{ing.etapa ? ing.etapa.charAt(0).toUpperCase() + ing.etapa.slice(1) : '-'}</TableCell>
+                            <TableCell className="truncate">{ing.isSubRecipe ? 'SubReceita' : 'Matéria Prima'}</TableCell>
+                            <TableCell className="font-medium whitespace-nowrap overflow-hidden text-ellipsis max-w-xs" style={{ maxWidth: 260 }}>{ing.productName}</TableCell>
+                            <TableCell className="text-right" style={{ fontVariantNumeric: 'tabular-nums' }}>{ing.quantity.toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })}</TableCell>
                             <TableCell>{ing.unit}</TableCell>
                             <TableCell>R$ {ing.cost.toFixed(2)}</TableCell>
                             <TableCell>R$ {ing.totalCost.toFixed(2)}</TableCell>
-                            <TableCell>
+                            <TableCell className="flex flex-col gap-1 items-center">
                               <Button 
                                 variant="ghost" 
                                 size="sm" 
-                                className="text-red-500 hover:text-red-700" 
+                                className="text-gray-500 hover:text-bakery-brown p-1"
+                                onClick={() => moveIngredientUp(idx)}
+                                disabled={idx === 0}
+                                title="Mover para cima"
+                              >
+                                <span style={{fontSize: '1.2em', lineHeight: 1}}>&uarr;</span>
+                              </Button>
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                className="text-gray-500 hover:text-bakery-brown p-1"
+                                onClick={() => moveIngredientDown(idx)}
+                                disabled={idx === ingredients.length - 1}
+                                title="Mover para baixo"
+                              >
+                                <span style={{fontSize: '1.2em', lineHeight: 1}}>&darr;</span>
+                              </Button>
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                className="text-red-500 hover:text-red-700 mt-1" 
                                 onClick={() => removeIngredient(ing.id)}
+                                title="Remover"
                               >
                                 <Trash size={16} />
                               </Button>
@@ -747,6 +965,18 @@ export default function RecipeForm() {
                     </TableBody>
                   </Table>
                 </div>
+                
+                {/* Exibir a soma total dos pesos dos ingredientes */}
+                {ingredients.length > 0 && (
+                  <div className="mt-4 pt-4 border-t text-right">
+                    <p className="text-lg font-semibold text-gray-700">
+                      Peso Total dos Ingredientes: 
+                      <span className="text-bakery-brown ml-2">
+                        {ingredients.reduce((sum, ing) => sum + ing.quantity, 0).toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} kg
+                      </span>
+                    </p>
+                  </div>
+                )}
               </TabsContent>
               
               <TabsContent value="instructions" className="p-6 mt-0">
@@ -834,14 +1064,14 @@ export default function RecipeForm() {
                 <div className="border-b pb-4">
                   <h3 className="text-sm text-gray-600 mb-1">Custo Total dos Ingredientes</h3>
                   <p className="text-2xl font-bold text-bakery-brown">
-                    R$ {totalIngredientsCost.toFixed(2)}
+                    {totalIngredientsCost.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                   </p>
                 </div>
                 
                 <div className="border-b pb-4">
                   <h3 className="text-sm text-gray-600 mb-1">Custo por kg</h3>
                   <p className="text-2xl font-bold text-bakery-brown">
-                    R$ {costPerKg.toFixed(2)}
+                    {costPerKg.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                   </p>
                 </div>
                 
@@ -849,7 +1079,7 @@ export default function RecipeForm() {
                   <h3 className="text-sm text-gray-600 mb-1">Custo por Unidade</h3>
                   <p className="text-2xl font-bold text-bakery-brown">
                     {recipeForm.yieldUnits > 0 
-                      ? `R$ ${costPerUnit.toFixed(2)}` 
+                      ? `${costPerUnit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}` 
                       : 'N/A'}
                   </p>
                 </div>
@@ -886,5 +1116,5 @@ export default function RecipeForm() {
         </div>
       </div>
     </div>
-  );
+  )
 }

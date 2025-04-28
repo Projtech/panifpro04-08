@@ -1,4 +1,3 @@
-
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Product, createProduct, getProduct, updateProduct } from "./productService";
@@ -61,6 +60,7 @@ export interface RecipeIngredient {
   unit: string;
   cost: number;
   total_cost: number;
+  etapa?: string | null;
 }
 
 export interface RecipeIngredientWithDetails extends RecipeIngredient {
@@ -255,6 +255,24 @@ export async function getAllRecipeIngredients(recipeId: string, quantity: number
   }
 }
 
+export async function checkRecipeNameExists(name: string, excludeId?: string): Promise<boolean> {
+  try {
+    const query = supabase
+      .from('recipes')
+      .select('id, name')
+      .ilike('name', name);
+    if (excludeId) {
+      query.neq('id', excludeId);
+    }
+    const { data, error } = await query;
+    if (error) throw error;
+    return data && data.length > 0;
+  } catch (error) {
+    console.error('[RECIPES] Error checking recipe name:', error);
+    return false;
+  }
+}
+
 export async function createRecipe(recipe: Omit<Recipe, 'id'>, ingredients: Omit<RecipeIngredient, 'id' | 'recipe_id'>[]): Promise<Recipe | null> {
   try {
     console.log("Criando nova receita:", recipe);
@@ -304,19 +322,32 @@ export async function createRecipe(recipe: Omit<Recipe, 'id'>, ingredients: Omit
       // Create or update linked product
       if (!existingProduct) {
         // Create new product linked to recipe
+        const isSubRecipe = processedRecipe.code === 'SUB';
         const newProduct: Omit<Product, 'id'> = {
           name: processedRecipe.name,
-          unit: processedRecipe.yield_units && processedRecipe.yield_units > 0 ? 'Un' : 'Kg',
-          sku: processedRecipe.code || 'R-' + processedRecipe.id.substring(0, 8), // Garantir que sempre tenha um SKU
+          product_type: isSubRecipe ? 'subreceita' : 'receita',
+          unit: 'Kg',
+          sku: processedRecipe.code || 'R-' + processedRecipe.id.substring(0, 8),
           supplier: 'Produção Interna',
           cost: processedRecipe.cost_per_kg || 0,
           unit_price: processedRecipe.cost_per_unit || 0,
           min_stock: 0,
           current_stock: 0,
-          recipe_id: processedRecipe.id, // Link to the recipe
+          recipe_id: processedRecipe.id,
           unit_weight: 0,
-          kg_weight: 0
+          kg_weight: processedRecipe.yield_kg || 0,
+          group_id: processedRecipe.group_id || null,
+          subgroup_id: processedRecipe.subgroup_id || null,
+          all_days: processedRecipe.all_days ?? null,
+          monday: processedRecipe.monday ?? null,
+          tuesday: processedRecipe.tuesday ?? null,
+          wednesday: processedRecipe.wednesday ?? null,
+          thursday: processedRecipe.thursday ?? null,
+          friday: processedRecipe.friday ?? null,
+          saturday: processedRecipe.saturday ?? null,
+          sunday: processedRecipe.sunday ?? null
         };
+
         
         console.log("Criando produto a partir da receita:", newProduct);
         try {
@@ -482,7 +513,8 @@ export async function updateRecipe(
           total_cost: ingredient.total_cost,
           is_sub_recipe: ingredient.is_sub_recipe,
           product_id: ingredient.product_id,
-          sub_recipe_id: ingredient.sub_recipe_id
+          sub_recipe_id: ingredient.sub_recipe_id,
+          etapa: ingredient.etapa
         })
         .eq('id', ingredient.id);
       

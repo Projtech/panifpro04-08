@@ -1,0 +1,115 @@
+# Lista Completa de Arquivos e Pastas do Projeto
+
+## Raiz do Projeto
+- .git/ (pasta)
+- .gitignore
+- API.md
+- ARQUITETURA.md
+- DOCUMENTATION.md
+- FLUXOS.md
+- INTEGRACOES.md
+- README.md
+- bun.lockb
+- components.json
+- dist/ (pasta)
+- eslint.config.js
+- index.html
+- node_modules/ (pasta)
+- package-lock.json
+- package.json
+- postcss.config.js
+- public/ (pasta)
+- sql/ (pasta)
+- src/ (pasta)
+- supabase/ (pasta)
+- tailwind.config.ts
+- tsconfig.app.json
+- tsconfig.json
+- tsconfig.node.json
+- vite.config.ts
+
+## src/components/
+- CampoDias.tsx
+- CampoFornecedor.tsx
+- CampoGrupo.tsx
+- CampoNome.tsx
+- CampoSKU.tsx
+- CampoSubgrupo.tsx
+- CampoTipo.tsx
+- CampoUnidade.tsx
+- HierarchicalGroupView.tsx
+- ProductForm.tsx
+- Dashboard/ (pasta)
+- ForcePasswordChange/ (pasta)
+- Group/ (pasta)
+- Inventory/ (pasta)
+- Layout/ (pasta)
+- ProductionCalendar/ (pasta)
+- ProductionOrder/ (pasta)
+- ProtectedRoute/ (pasta)
+- ui/ (pasta)
+
+## src/pages/
+- Admin/ (pasta)
+- Auth/ (pasta)
+- Company/ (pasta)
+- Dashboard.tsx
+- GroupsManagement.tsx
+- Index.tsx
+- Inventory.tsx
+- NotFound.tsx
+- NovoProduto.tsx
+- ProductionCalendar.tsx
+- ProductionConfirmation.tsx
+- ProductionOrderForm.tsx
+- ProductionOrders.tsx
+- Products.tsx
+- RecipeForm.tsx
+- Recipes.tsx
+
+## src/services/
+- exportService.ts
+- groupService.ts
+- inventory/ (pasta)
+- inventoryService.ts
+- pdfService.ts
+- productService.ts
+- productionListService.ts
+- productionOrderService.ts
+- recipeService.ts
+
+## src/contexts/
+- AuthContext.tsx
+
+## src/hooks/
+- use-mobile.tsx
+- use-toast.ts
+- useDashboardData.ts
+- useDialogControl.ts
+- useGroupForm.ts
+- useGroupManagement.ts
+- useGroupSelection.ts
+- useProductionListItems.ts
+- useProductionLists.ts
+- useProductionOrder.ts
+- useSubgroupForm.ts
+
+## src/lib/
+- formatters.ts
+- numberUtils.ts
+- utils.ts
+
+## src/integrations/
+- supabase/ (pasta)
+
+## src/types/
+- supabase.ts
+
+## Outras pastas
+- dist/ (build de produção)
+- public/ (arquivos públicos)
+- sql/ (scripts SQL)
+- supabase/ (configuração e integração Supabase)
+- node_modules/ (dependências)
+
+# Fim da lista

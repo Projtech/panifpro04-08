@@ -12,6 +12,8 @@ import StatusManager from "@/components/ProductionOrder/StatusManager";
 import MaterialsCalculator from "@/components/ProductionOrder/MaterialsCalculator";
 
 interface LocationState {
+  produtos?: Array<any>; // Produtos vindos do calendário ou pré-lista
+  dia?: string; // Dia da semana
   calendarItems?: Array<{
     recipe_id: string | null;
     recipe_name: string;
@@ -20,6 +22,9 @@ interface LocationState {
     unit: string;
   }>;
   calendarDate?: string;
+  fromPreList?: boolean; // Indica se os produtos vieram de uma pré-lista
+  preListId?: string; // ID da pré-lista
+  preListName?: string; // Nome da pré-lista
 }
 
 export default function ProductionOrderForm() {
@@ -27,7 +32,53 @@ export default function ProductionOrderForm() {
   const location = useLocation();
   const state = location.state as LocationState;
   const navigate = useNavigate();
-  
+
+  // Pré-montar receitas se vieram produtos da pré-lista ou do calendário
+  useEffect(() => {
+    if (state?.produtos && state.produtos.length > 0 && setOrderRecipes) {
+      console.log("Produtos recebidos na tela de pedido:", state.produtos);
+      
+      const mapped = state.produtos.map((prod: any, idx: number) => {
+        // Detectar corretamente a origem - calendário ou pré-lista
+        const isFromCalendar = 'fromCalendar' in prod && prod.fromCalendar === true;
+        
+        // Se vier do calendário, usar a estrutura nova com recipe_id
+        if (isFromCalendar) {
+          return {
+            id: `calendar-item-${idx}-${prod.recipeId || Math.random()}`,
+            recipeId: prod.recipeId,
+            recipeName: prod.recipeName || "Produto sem nome",
+            quantity: typeof prod.quantity === 'number' ? prod.quantity : parseFloat(prod.quantity) || 0,
+            unit: (prod.unit || "un").toLowerCase(),
+            convertedQuantity: 0,
+            fromCalendar: true
+          };
+        } else {
+          // Manter o comportamento original para outros tipos de dados
+          const isFromPreList = 'product_id' in prod;
+          return {
+            id: `prelist-item-${idx}-${isFromPreList ? prod.product_id : (prod.recipe_id || prod.id || Math.random())}`,
+            recipeId: isFromPreList ? prod.product_id : (prod.recipe_id || null),
+            recipeName: isFromPreList ? (prod.product_name || "Produto sem nome") : prod.name,
+            quantity: isFromPreList ? prod.quantity : (prod.unit === 'kg' ? (prod.kg_weight || 1) : (prod.unit_weight || 1)),
+            unit: isFromPreList ? prod.unit.toLowerCase() : (prod.unit || "kg").toLowerCase(),
+            convertedQuantity: 0,
+            fromPreList: isFromPreList,
+            fromCalendar: !isFromPreList
+          };
+        }
+      });
+      setOrderRecipes(mapped);
+      
+      // Definir um número para o pedido baseado na origem dos dados
+      if (state.fromPreList && setOrderNumber) {
+        setOrderNumber(`P${state.preListName ? state.preListName.substring(0, 5) : ''}-${String(new Date().getTime()).slice(-4)}`);
+      }
+    }
+    // Se desejar, pode também ajustar a data do pedido para o próximo dia do calendário
+    // if (state?.dia && setOrderDate) { ... }
+  }, [state?.produtos]);
+
   const {
     loading,
     recipes,
