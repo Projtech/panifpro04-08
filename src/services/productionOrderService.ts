@@ -29,7 +29,7 @@ export interface ProductionOrderWithItems extends ProductionOrder {
   items: ProductionOrderItem[];
 }
 
-export async function getProductionOrders(): Promise<ProductionOrderWithItems[]> {
+export async function getProductionOrders(companyId: string): Promise<ProductionOrderWithItems[]> {
   try {
     const { data, error } = await supabase
       .from('production_orders')
@@ -37,6 +37,7 @@ export async function getProductionOrders(): Promise<ProductionOrderWithItems[]>
         *,
         items:production_order_items(*)
       `)
+      .eq('company_id', companyId)
       .order('date', { ascending: false });
     
     if (error) throw error;
@@ -55,7 +56,7 @@ export async function getProductionOrders(): Promise<ProductionOrderWithItems[]>
   }
 }
 
-export async function getProductionOrder(id: string): Promise<ProductionOrderWithItems | null> {
+export async function getProductionOrder(id: string, companyId: string): Promise<ProductionOrderWithItems | null> {
   try {
     const { data, error } = await supabase
       .from('production_orders')
@@ -64,6 +65,7 @@ export async function getProductionOrder(id: string): Promise<ProductionOrderWit
         items:production_order_items(*)
       `)
       .eq('id', id)
+      .eq('company_id', companyId)
       .single();
     
     if (error) throw error;
@@ -80,7 +82,7 @@ export async function getProductionOrder(id: string): Promise<ProductionOrderWit
   }
 }
 
-export async function getPendingProductionOrders(): Promise<ProductionOrderWithItems[]> {
+export async function getPendingProductionOrders(companyId: string): Promise<ProductionOrderWithItems[]> {
   try {
     const { data, error } = await supabase
       .from('production_orders')
@@ -88,6 +90,7 @@ export async function getPendingProductionOrders(): Promise<ProductionOrderWithI
         *,
         items:production_order_items(*)
       `)
+      .eq('company_id', companyId)
       .in('status', ['pending', 'in_progress'])
       .order('date', { ascending: false });
     
@@ -108,14 +111,15 @@ export async function getPendingProductionOrders(): Promise<ProductionOrderWithI
 }
 
 export async function createProductionOrder(
-  order: Omit<ProductionOrder, 'id' | 'created_at'>,
-  items: Omit<ProductionOrderItem, 'id' | 'order_id'>[]
+  order: Omit<ProductionOrder, 'id' | 'created_at'> & { companyId: string },
+  items: (Omit<ProductionOrderItem, 'id' | 'order_id'> & { companyId?: string })[]
 ): Promise<ProductionOrderWithItems | null> {
   try {
     // Create production order
+    const { companyId, ...orderRest } = order;
     const { data: orderData, error: orderError } = await supabase
       .from('production_orders')
-      .insert([order])
+      .insert([{ ...orderRest, company_id: companyId }])
       .select()
       .single();
     
@@ -125,7 +129,8 @@ export async function createProductionOrder(
       // Add items
       const itemsWithOrderId = items.map(item => ({
         ...item,
-        order_id: orderData.id
+        order_id: orderData.id,
+        company_id: companyId
       }));
       
       const { error: itemsError } = await supabase
@@ -143,6 +148,7 @@ export async function createProductionOrder(
         items:production_order_items(*)
       `)
       .eq('id', orderData?.id)
+      .eq('company_id', companyId)
       .single();
     
     if (fullOrderError) throw fullOrderError;
@@ -169,7 +175,8 @@ export async function createProductionOrderFromCalendar(
     planned_quantity_kg: number;
     planned_quantity_units: number | null;
     unit: string;
-  }>
+  }>,
+  companyId: string
 ): Promise<ProductionOrderWithItems | null> {
   try {
     // Gera número do pedido usando a data
@@ -182,7 +189,8 @@ export async function createProductionOrderFromCalendar(
         order_number: orderNumber,
         date: date,
         status: 'pending' as OrderStatus,
-        adjust_materials: true // Indica que este pedido veio do calendário
+        adjust_materials: true,
+        company_id: companyId // multi-empresa
       }])
       .select()
       .single();
@@ -199,7 +207,8 @@ export async function createProductionOrderFromCalendar(
         planned_quantity_units: item.unit === 'un' ? item.planned_quantity_units : null,
         actual_quantity_kg: null,
         actual_quantity_units: null,
-        unit: item.unit
+        unit: item.unit,
+        company_id: companyId // multi-empresa
       }));
       
       // Insere os itens
@@ -218,6 +227,7 @@ export async function createProductionOrderFromCalendar(
         items:production_order_items(*)
       `)
       .eq('id', orderData.id)
+      .eq('company_id', companyId)
       .single();
     
     if (fullOrderError) throw fullOrderError;
@@ -236,12 +246,13 @@ export async function createProductionOrderFromCalendar(
   }
 }
 
-export async function updateProductionOrderStatus(id: string, status: OrderStatus): Promise<boolean> {
+export async function updateProductionOrderStatus(id: string, status: OrderStatus, companyId: string): Promise<boolean> {
   try {
     const { error } = await supabase
       .from('production_orders')
       .update({ status })
-      .eq('id', id);
+      .eq('id', id)
+      .eq('company_id', companyId);
     
     if (error) throw error;
     
@@ -261,6 +272,7 @@ export async function updateProductionOrderStatus(id: string, status: OrderStatu
 export async function confirmProductionOrder(
   id: string,
   items: ProductionOrderItem[],
+  companyId: string,
   notes: string | null = null
 ): Promise<boolean> {
   try {
@@ -268,7 +280,8 @@ export async function confirmProductionOrder(
     const { error: statusError } = await supabase
       .from('production_orders')
       .update({ status: 'completed' as OrderStatus })
-      .eq('id', id);
+      .eq('id', id)
+      .eq('company_id', companyId);
     
     if (statusError) throw statusError;
     
@@ -280,7 +293,8 @@ export async function confirmProductionOrder(
           actual_quantity_kg: item.actual_quantity_kg,
           actual_quantity_units: item.actual_quantity_units
         })
-        .eq('id', item.id);
+        .eq('id', item.id)
+        .eq('company_id', companyId);
       
       if (itemError) throw itemError;
     }
@@ -294,12 +308,13 @@ export async function confirmProductionOrder(
   }
 }
 
-export async function deleteProductionOrder(id: string): Promise<boolean> {
+export async function deleteProductionOrder(id: string, companyId: string): Promise<boolean> {
   try {
     const { error } = await supabase
       .from('production_orders')
       .delete()
-      .eq('id', id);
+      .eq('id', id)
+      .eq('company_id', companyId);
     
     if (error) throw error;
     

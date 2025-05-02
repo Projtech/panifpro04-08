@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { Loader2 } from "lucide-react";
@@ -44,8 +43,10 @@ export default function ProductionOrderForm() {
         
         // Se vier do calendário, usar a estrutura nova com recipe_id
         if (isFromCalendar) {
+          // Use recipeId if available, otherwise use index as fallback for stability
+          const stableId = prod.recipeId ? `calendar-recipe-${prod.recipeId}` : `calendar-index-${idx}`;
           return {
-            id: `calendar-item-${idx}-${prod.recipeId || Math.random()}`,
+            id: stableId, // Stable ID
             recipeId: prod.recipeId,
             recipeName: prod.recipeName || "Produto sem nome",
             quantity: typeof prod.quantity === 'number' ? prod.quantity : parseFloat(prod.quantity) || 0,
@@ -54,17 +55,20 @@ export default function ProductionOrderForm() {
             fromCalendar: true
           };
         } else {
-          // Manter o comportamento original para outros tipos de dados
+          // Manter o comportamento original para outros tipos de dados (ex: pré-lista)
           const isFromPreList = 'product_id' in prod;
+          // Use product_id or recipe_id/id if available, otherwise use index
+          const idSource = isFromPreList ? prod.product_id : (prod.recipe_id || prod.id);
+          const stableId = idSource ? `prelist-item-${idSource}` : `prelist-index-${idx}`;
           return {
-            id: `prelist-item-${idx}-${isFromPreList ? prod.product_id : (prod.recipe_id || prod.id || Math.random())}`,
+            id: stableId, // Stable ID
             recipeId: isFromPreList ? prod.product_id : (prod.recipe_id || null),
             recipeName: isFromPreList ? (prod.product_name || "Produto sem nome") : prod.name,
             quantity: isFromPreList ? prod.quantity : (prod.unit === 'kg' ? (prod.kg_weight || 1) : (prod.unit_weight || 1)),
             unit: isFromPreList ? prod.unit.toLowerCase() : (prod.unit || "kg").toLowerCase(),
             convertedQuantity: 0,
             fromPreList: isFromPreList,
-            fromCalendar: !isFromPreList
+            fromCalendar: !isFromPreList // Assuming if not prelist, it's like calendar
           };
         }
       });

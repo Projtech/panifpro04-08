@@ -68,11 +68,13 @@ export interface RecipeIngredientWithDetails extends RecipeIngredient {
   sub_recipe?: Recipe | null;
 }
 
-export async function getRecipes(): Promise<Recipe[]> {
+export async function getRecipes(companyId: string): Promise<Recipe[]> {
+  if (!companyId) throw new Error('[getRecipes] companyId é obrigatório');
   try {
     const { data, error } = await supabase
       .from('recipes')
       .select('*')
+      .eq('company_id', companyId)
       .order('name');
     
     if (error) throw error;
@@ -102,12 +104,14 @@ export async function getRecipes(): Promise<Recipe[]> {
   }
 }
 
-export async function getRecipe(id: string): Promise<Recipe | null> {
+export async function getRecipe(id: string, companyId: string): Promise<Recipe | null> {
+  if (!companyId) throw new Error('[getRecipe] companyId é obrigatório');
   try {
     const { data, error } = await supabase
       .from('recipes')
       .select('*')
       .eq('id', id)
+      .eq('company_id', companyId)
       .single();
     
     if (error) throw error;
@@ -137,12 +141,14 @@ export async function getRecipe(id: string): Promise<Recipe | null> {
   }
 }
 
-export async function getRecipeWithIngredients(id: string): Promise<{recipe: Recipe | null, ingredients: RecipeIngredientWithDetails[]}> {
+export async function getRecipeWithIngredients(id: string, companyId: string): Promise<{recipe: Recipe | null, ingredients: RecipeIngredientWithDetails[]}> {
+  if (!companyId) throw new Error('[getRecipeWithIngredients] companyId é obrigatório');
   try {
     const { data: recipeData, error: recipeError } = await supabase
       .from('recipes')
       .select('*')
       .eq('id', id)
+      .eq('company_id', companyId)
       .single();
     
     if (recipeError) throw recipeError;
@@ -169,7 +175,8 @@ export async function getRecipeWithIngredients(id: string): Promise<{recipe: Rec
         product:products(*),
         sub_recipe:recipes!recipe_ingredients_sub_recipe_id_fkey(*)
       `) 
-      .eq('recipe_id', id);
+      .eq('recipe_id', id)
+      .eq('company_id', companyId);
     
     if (ingredientsError) throw ingredientsError;
     
@@ -209,10 +216,11 @@ export async function getRecipeWithIngredients(id: string): Promise<{recipe: Rec
 }
 
 // Função para obter todos os ingredientes de uma receita, incluindo os ingredientes das sub-receitas
-export async function getAllRecipeIngredients(recipeId: string, quantity: number = 1): Promise<RecipeIngredientWithDetails[]> {
+export async function getAllRecipeIngredients(recipeId: string, companyId: string, quantity: number = 1): Promise<RecipeIngredientWithDetails[]> {
+  if (!companyId) throw new Error('[getAllRecipeIngredients] companyId é obrigatório');
   try {
     console.log(`Buscando ingredientes para a receita ${recipeId} com quantidade ${quantity}`);
-    const { recipe, ingredients } = await getRecipeWithIngredients(recipeId);
+    const { recipe, ingredients } = await getRecipeWithIngredients(recipeId, companyId);
     
     if (!recipe) {
       console.error(`Receita ${recipeId} não encontrada`);
@@ -230,7 +238,7 @@ export async function getAllRecipeIngredients(recipeId: string, quantity: number
         const subQuantity = (ingredient.quantity / recipe.yield_kg) * quantity;
         
         // Busca recursivamente os ingredientes da sub-receita
-        const subIngredients = await getAllRecipeIngredients(ingredient.sub_recipe_id, subQuantity);
+        const subIngredients = await getAllRecipeIngredients(ingredient.sub_recipe_id, companyId, subQuantity);
         
         // Adiciona os ingredientes da sub-receita à lista
         allIngredients = [...allIngredients, ...subIngredients];
@@ -255,12 +263,14 @@ export async function getAllRecipeIngredients(recipeId: string, quantity: number
   }
 }
 
-export async function checkRecipeNameExists(name: string, excludeId?: string): Promise<boolean> {
+export async function checkRecipeNameExists(name: string, companyId: string, excludeId?: string): Promise<boolean> {
+  if (!companyId) throw new Error('[checkRecipeNameExists] companyId é obrigatório');
   try {
     const query = supabase
       .from('recipes')
       .select('id, name')
-      .ilike('name', name);
+      .ilike('name', name)
+      .eq('company_id', companyId);
     if (excludeId) {
       query.neq('id', excludeId);
     }
@@ -273,12 +283,13 @@ export async function checkRecipeNameExists(name: string, excludeId?: string): P
   }
 }
 
-export async function createRecipe(recipe: Omit<Recipe, 'id'>, ingredients: Omit<RecipeIngredient, 'id' | 'recipe_id'>[]): Promise<Recipe | null> {
+export async function createRecipe(recipe: Omit<Recipe, 'id'>, ingredients: Omit<RecipeIngredient, 'id' | 'recipe_id'>[], companyId: string): Promise<Recipe | null> {
+  if (!companyId) throw new Error('[createRecipe] companyId é obrigatório');
   try {
     console.log("Criando nova receita:", recipe);
     const { data: recipeData, error: recipeError } = await supabase
       .from('recipes')
-      .insert([recipe])
+      .insert([{ ...recipe, company_id: companyId }])
       .select()
       .single();
     
@@ -311,6 +322,7 @@ export async function createRecipe(recipe: Omit<Recipe, 'id'>, ingredients: Omit
         .from('products')
         .select('*')
         .eq('name', processedRecipe.name)
+        .eq('company_id', companyId)
         .maybeSingle();
       
       if (productQueryError) {
@@ -323,35 +335,39 @@ export async function createRecipe(recipe: Omit<Recipe, 'id'>, ingredients: Omit
       if (!existingProduct) {
         // Create new product linked to recipe
         const isSubRecipe = processedRecipe.code === 'SUB';
+        // Determina a unidade final do PRODUTO
+        const finalUnit = isSubRecipe ? 'Kg' : (processedRecipe.yield_units && processedRecipe.yield_units > 0 ? 'UN' : 'Kg');
+        // Calcula pesos
+        const calculatedUnitWeight = (finalUnit === 'UN' && processedRecipe.yield_units && processedRecipe.yield_units > 0 && processedRecipe.yield_kg)
+                                   ? (processedRecipe.yield_kg / processedRecipe.yield_units)
+                                   : null;
+        const calculatedKgWeight = (finalUnit === 'Kg') ? processedRecipe.yield_kg : null;
+        // Determina o custo correto baseado na unidade final
+        const finalCost = finalUnit === 'UN' ? processedRecipe.cost_per_unit : processedRecipe.cost_per_kg;
+
         const newProduct: Omit<Product, 'id'> = {
           name: processedRecipe.name,
           product_type: isSubRecipe ? 'subreceita' : 'receita',
-          unit: 'Kg',
-          sku: processedRecipe.code || 'R-' + processedRecipe.id.substring(0, 8),
-          supplier: 'Produção Interna',
-          cost: processedRecipe.cost_per_kg || 0,
-          unit_price: processedRecipe.cost_per_unit || 0,
-          min_stock: 0,
-          current_stock: 0,
+          unit: finalUnit,
+          cost: finalCost ?? 0,
+          unit_weight: calculatedUnitWeight,
+          kg_weight: calculatedKgWeight,
           recipe_id: processedRecipe.id,
-          unit_weight: 0,
-          kg_weight: processedRecipe.yield_kg || 0,
           group_id: processedRecipe.group_id || null,
           subgroup_id: processedRecipe.subgroup_id || null,
-          all_days: processedRecipe.all_days ?? null,
-          monday: processedRecipe.monday ?? null,
-          tuesday: processedRecipe.tuesday ?? null,
-          wednesday: processedRecipe.wednesday ?? null,
-          thursday: processedRecipe.thursday ?? null,
-          friday: processedRecipe.friday ?? null,
-          saturday: processedRecipe.saturday ?? null,
-          sunday: processedRecipe.sunday ?? null
+          code: processedRecipe.code || null,
+          sku: processedRecipe.code || 'R-' + processedRecipe.id.substring(0, 8),
+          supplier: 'Produção Interna',
+          min_stock: 0,
+          current_stock: 0,
+          unit_price: 0,
+          ativo: true
         };
 
         
         console.log("Criando produto a partir da receita:", newProduct);
         try {
-          const createdProduct = await createProduct(newProduct);
+          const createdProduct = await createProduct(newProduct, companyId);
           console.log("Produto criado com sucesso:", createdProduct);
         } catch (productError) {
           console.error("Erro ao criar produto a partir da receita:", productError);
@@ -363,13 +379,14 @@ export async function createRecipe(recipe: Omit<Recipe, 'id'>, ingredients: Omit
           unit_price: processedRecipe.cost_per_unit || 0,
           recipe_id: processedRecipe.id,
           supplier: 'Produção Interna'
-        });
+        }, companyId);
       }
       
       if (ingredients.length > 0) {
         const ingredientsWithRecipeId = ingredients.map(ingredient => ({
           ...ingredient,
-          recipe_id: processedRecipe.id
+          recipe_id: processedRecipe.id,
+          company_id: companyId
         }));
         
         const { error: ingredientsError } = await supabase
@@ -396,13 +413,16 @@ export async function updateRecipe(
   recipe: Partial<Recipe>, 
   ingredientsToAdd: Omit<RecipeIngredient, 'id' | 'recipe_id'>[],
   ingredientsToUpdate: RecipeIngredient[],
-  ingredientsToDelete: string[]
+  ingredientsToDelete: string[],
+  companyId: string
 ): Promise<Recipe | null> {
+  if (!companyId) throw new Error('[updateRecipe] companyId é obrigatório');
   try {
     const { data: recipeDataRaw, error: recipeError } = await supabase
       .from('recipes')
       .update(recipe)
       .eq('id', id)
+      .eq('company_id', companyId)
       .select()
       .single();
     
@@ -425,58 +445,68 @@ export async function updateRecipe(
     
     // Find and update the linked product
     if (recipeData) {
-      console.log("Buscando produto vinculado à receita:", id);
+      console.log("Buscando produto vinculado à receita:", recipeData.id);
       const { data: linkedProduct, error: productQueryError } = await supabase
         .from('products')
         .select('*')
-        .eq('recipe_id', id)
+        .eq('recipe_id', recipeData.id)
+        .eq('company_id', companyId)
         .maybeSingle();
       
       if (productQueryError) {
         console.error("Erro ao buscar produto vinculado:", productQueryError);
-      }
-      
-      console.log("Produto vinculado encontrado:", linkedProduct);
-      
-      if (linkedProduct) {
-        // Update the linked product with recipe data
-        console.log("Atualizando produto vinculado:", linkedProduct.id);
-        try {
-          await updateProduct(linkedProduct.id, {
-            name: recipeData.name,
-            sku: recipeData.code || linkedProduct.sku || 'R-' + id.substring(0, 8),
-            unit: recipeData.yield_units && recipeData.yield_units > 0 ? 'Un' : 'Kg',
-            cost: recipeData.cost_per_kg || 0,
-            unit_price: recipeData.cost_per_unit || 0,
-            supplier: 'Produção Interna'
-          });
-          console.log("Produto atualizado com sucesso:", linkedProduct.id);
-        } catch (updateError) {
-          console.error("Erro ao atualizar produto vinculado:", updateError);
-        }
+        toast.error("Erro ao buscar produto vinculado para atualização.");
       } else {
-        // If no linked product exists, create one
-        console.log("Nenhum produto vinculado encontrado. Criando novo produto.");
-        const newProduct: Omit<Product, 'id'> = {
+        const isSubRecipe = recipeData.code === 'SUB';
+        const finalUnit = isSubRecipe ? 'Kg' : (recipeData.yield_units && recipeData.yield_units > 0 ? 'UN' : 'Kg');
+        const calculatedUnitWeight = (finalUnit === 'UN' && recipeData.yield_units && recipeData.yield_units > 0 && recipeData.yield_kg)
+                                   ? (recipeData.yield_kg / recipeData.yield_units)
+                                   : null;
+        const calculatedKgWeight = (finalUnit === 'Kg') ? recipeData.yield_kg : null;
+        const finalCost = finalUnit === 'UN' ? recipeData.cost_per_unit : recipeData.cost_per_kg;
+
+        const productPayload: Partial<Product> = {
           name: recipeData.name,
-          unit: recipeData.yield_units && recipeData.yield_units > 0 ? 'Un' : 'Kg',
-          sku: recipeData.code || 'R-' + id.substring(0, 8), // Garantir que sempre tenha um SKU
+          product_type: isSubRecipe ? 'subreceita' : 'receita',
+          unit: finalUnit,
+          cost: finalCost ?? 0,
+          unit_weight: calculatedUnitWeight,
+          kg_weight: calculatedKgWeight,
+          group_id: recipeData.group_id || null,
+          subgroup_id: recipeData.subgroup_id || null,
+          code: recipeData.code || null,
+          sku: recipeData.code || linkedProduct?.sku || 'R-' + recipeData.id.substring(0, 8),
           supplier: 'Produção Interna',
-          cost: recipeData.cost_per_kg || 0,
-          unit_price: recipeData.cost_per_unit || 0,
-          min_stock: 0,
-          current_stock: 0,
-          recipe_id: recipeData.id,
-          unit_weight: 0,
-          kg_weight: 0
+          recipe_id: recipeData.id
         };
-        
-        console.log("Criando produto a partir da receita atualizada:", newProduct);
-        try {
-          const createdProduct = await createProduct(newProduct);
-          console.log("Produto criado com sucesso na atualização:", createdProduct);
-        } catch (createError) {
-          console.error("Erro ao criar produto na atualização da receita:", createError);
+
+        if (linkedProduct) {
+          // Atualiza o produto existente
+          console.log("Atualizando produto vinculado:", linkedProduct.id);
+          try {
+            await updateProduct(linkedProduct.id, productPayload, companyId);
+            console.log("Produto vinculado atualizado com sucesso:", linkedProduct.id);
+          } catch (updateError) {
+            console.error("Erro ao atualizar produto vinculado:", updateError);
+            toast.error("Receita atualizada, mas falha ao atualizar produto associado.");
+          }
+        } else {
+          // Cria um novo produto se não existia vínculo
+          console.log("Nenhum produto vinculado encontrado. Criando novo produto.");
+          const productToCreate: Omit<Product, 'id'> = {
+            ...(productPayload as Omit<Product, 'id'>),
+            min_stock: 0,
+            current_stock: 0,
+            unit_price: 0,
+            ativo: true
+          };
+          try {
+            const createdProduct = await createProduct(productToCreate, companyId);
+            console.log("Produto criado com sucesso na atualização da receita:", createdProduct);
+          } catch (createError) {
+            console.error("Erro ao criar produto na atualização da receita:", createError);
+            toast.error("Receita atualizada, mas falha ao criar produto associado.");
+          }
         }
       }
     }
@@ -485,7 +515,8 @@ export async function updateRecipe(
       const { error: deleteError } = await supabase
         .from('recipe_ingredients')
         .delete()
-        .in('id', ingredientsToDelete);
+        .in('id', ingredientsToDelete)
+        .eq('company_id', companyId);
       
       if (deleteError) throw deleteError;
     }
@@ -493,7 +524,8 @@ export async function updateRecipe(
     if (ingredientsToAdd.length > 0) {
       const ingredientsWithRecipeId = ingredientsToAdd.map(ingredient => ({
         ...ingredient,
-        recipe_id: id
+        recipe_id: id,
+        company_id: companyId
       }));
       
       const { error: addError } = await supabase
@@ -506,17 +538,9 @@ export async function updateRecipe(
     for (const ingredient of ingredientsToUpdate) {
       const { error: updateError } = await supabase
         .from('recipe_ingredients')
-        .update({
-          quantity: ingredient.quantity,
-          unit: ingredient.unit,
-          cost: ingredient.cost,
-          total_cost: ingredient.total_cost,
-          is_sub_recipe: ingredient.is_sub_recipe,
-          product_id: ingredient.product_id,
-          sub_recipe_id: ingredient.sub_recipe_id,
-          etapa: ingredient.etapa
-        })
-        .eq('id', ingredient.id);
+        .update(ingredient)
+        .eq('id', ingredient.id!)
+        .eq('company_id', companyId);
       
       if (updateError) throw updateError;
     }
@@ -530,12 +554,14 @@ export async function updateRecipe(
   }
 }
 
-export async function deleteRecipe(id: string): Promise<boolean> {
+export async function deleteRecipe(id: string, companyId: string): Promise<boolean> {
+  if (!companyId) throw new Error('[deleteRecipe] companyId é obrigatório');
   try {
     const { error } = await supabase
       .from('recipes')
       .delete()
-      .eq('id', id);
+      .eq('id', id)
+      .eq('company_id', companyId);
     
     if (error) throw error;
     toast.success("Receita excluída com sucesso");
@@ -547,11 +573,13 @@ export async function deleteRecipe(id: string): Promise<boolean> {
   }
 }
 
-export async function updateAllRecipesCosts(): Promise<boolean> {
+export async function updateAllRecipesCosts(companyId: string): Promise<boolean> {
+  if (!companyId) throw new Error('[updateAllRecipesCosts] companyId é obrigatório');
   try {
     const { data: recipes, error: recipesError } = await supabase
       .from('recipes')
       .select('*')
+      .eq('company_id', companyId)
       .order('code');
     
     if (recipesError) throw recipesError;
@@ -564,11 +592,11 @@ export async function updateAllRecipesCosts(): Promise<boolean> {
     const subProductRecipes = recipes.filter(r => r.code === 'SUB');
     
     for (const recipe of regularRecipes) {
-      await updateRecipeCost(recipe.id);
+      await updateRecipeCost(recipe.id, companyId);
     }
     
     for (const recipe of subProductRecipes) {
-      await updateRecipeCost(recipe.id);
+      await updateRecipeCost(recipe.id, companyId);
     }
     
     toast.success("Custos de todas as receitas atualizados com sucesso");
@@ -580,9 +608,9 @@ export async function updateAllRecipesCosts(): Promise<boolean> {
   }
 }
 
-async function updateRecipeCost(recipeId: string): Promise<boolean> {
+async function updateRecipeCost(recipeId: string, companyId: string): Promise<boolean> {
   try {
-    const { recipe, ingredients } = await getRecipeWithIngredients(recipeId);
+    const { recipe, ingredients } = await getRecipeWithIngredients(recipeId, companyId);
     
     if (!recipe) return false;
     
@@ -594,6 +622,7 @@ async function updateRecipeCost(recipeId: string): Promise<boolean> {
           .from('recipes')
           .select('cost_per_kg')
           .eq('id', ingredient.sub_recipe_id)
+          .eq('company_id', companyId)
           .single();
         
         if (subRecipe) {
@@ -607,13 +636,15 @@ async function updateRecipeCost(recipeId: string): Promise<boolean> {
               cost: costPerKg,
               total_cost: totalIngredientCost
             })
-            .eq('id', ingredient.id);
+            .eq('id', ingredient.id)
+            .eq('company_id', companyId);
         }
       } else if (ingredient.product_id) {
         const { data: product } = await supabase
           .from('products')
           .select('cost')
           .eq('id', ingredient.product_id)
+          .eq('company_id', companyId)
           .single();
         
         if (product) {
@@ -627,7 +658,8 @@ async function updateRecipeCost(recipeId: string): Promise<boolean> {
               cost: cost,
               total_cost: totalIngredientCost
             })
-            .eq('id', ingredient.id);
+            .eq('id', ingredient.id)
+            .eq('company_id', companyId);
         }
       }
     }
@@ -641,13 +673,15 @@ async function updateRecipeCost(recipeId: string): Promise<boolean> {
         cost_per_kg: costPerKg,
         cost_per_unit: costPerUnit
       })
-      .eq('id', recipe.id);
+      .eq('id', recipe.id)
+      .eq('company_id', companyId);
     
     // Update the linked product if this is a recipe
     const { data: linkedProduct } = await supabase
       .from('products')
       .select('id')
       .eq('recipe_id', recipe.id)
+      .eq('company_id', companyId)
       .maybeSingle();
     
     if (linkedProduct) {
@@ -657,7 +691,8 @@ async function updateRecipeCost(recipeId: string): Promise<boolean> {
           cost: costPerKg,
           unit_price: costPerUnit || 0
         })
-        .eq('id', linkedProduct.id);
+        .eq('id', linkedProduct.id)
+        .eq('company_id', companyId);
     }
     
     return true;

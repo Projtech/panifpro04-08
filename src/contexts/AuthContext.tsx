@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Session, User } from '@supabase/supabase-js';
+import { toast } from 'sonner';
+import { queryClient } from '@/lib/react-query';
 
 interface Company {
   id: string;
@@ -72,21 +74,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
+    console.log('[AuthContext] useEffect inicial de autenticação disparado');
     // Verificar se há uma empresa ativa no localStorage
     const storedCompany = localStorage.getItem('activeCompany');
     if (storedCompany) {
+      console.log('[AuthContext] Empresa ativa encontrada no localStorage:', storedCompany);
       setActiveCompany(JSON.parse(storedCompany));
+    } else {
+      console.log('[AuthContext] Nenhuma empresa ativa encontrada no localStorage');
     }
 
     // Configurar o listener de autenticação
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+      async (event, session) => {
+        if (event === 'PASSWORD_RECOVERY') {
+          setSession(session);
+          setUser(session?.user ?? null);
+          setLoading(false);
+          setNeedsPasswordChange(true);
+          // Não executa signOut ou lógica de empresa aqui!
+          return;
+        }
+
+        // Verificar se a sessão é válida
+        if (session?.user) {
+          const { data: { session: validSession } } = await supabase.auth.getSession();
+          if (!validSession) {
+            console.warn('Sessão expirada. Deslogando usuário.');
+            toast.error("Sua sessão expirou. Faça login novamente.");
+            await signOut();
+            return;
+          }
+        }
+
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
 
         // --- BLOQUEIO POR ASSOCIAÇÃO DE EMPRESA ---
-        if (session?.user) {
+        if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user) {
           const { data, error } = await supabase
             .from('company_users')
             .select('company_id, company:company_id(name), role')
@@ -104,46 +130,74 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const company: Company = {
               id: companyData.company_id,
               name: companyData.company?.name || '',
-              role: companyData.role || 'user',
+              role: companyData.role === 'admin' ? 'admin' : 'user',
             };
             setActiveCompany(company);
             localStorage.setItem('activeCompany', JSON.stringify(company));
           }
         }
+
+        if (event === 'SIGNED_OUT') {
+          setSession(null);
+          setUser(null);
+          setActiveCompany(null);
+          setLoading(false);
+          setNeedsPasswordChange(false);
+          // Removido: toast.info("Você foi deslogado.");
+        }
       }
     );
 
     // Carregar sessão inicial
+    console.log('[AuthContext] Carregando sessão inicial via supabase.auth.getSession()...');
     supabase.auth.getSession().then(async ({ data: { session } }) => {
+      console.log('[AuthContext] Sessão inicial recebida:', session);
+      if (!session || !session.user) {
+        setSession(null);
+        setUser(null);
+        setActiveCompany(null);
+        setLoading(false);
+        setNeedsPasswordChange(false);
+        console.log('[AuthContext] Sessão ausente ou inválida na inicialização: estados limpos e loading finalizado.');
+        return;
+      }
       setSession(session);
-      setUser(session?.user ?? null);
+      setUser(session.user);
+      console.log('[AuthContext] setSession/setUser chamados na inicialização. setLoading(false) será chamado agora');
       setLoading(false);
+      console.log('[AuthContext] setLoading(false) chamado após inicialização de sessão');
 
       // --- BLOQUEIO POR ASSOCIAÇÃO DE EMPRESA ---
       if (session?.user) {
+        console.log('[AuthContext] Buscando empresa associada ao usuário (sessão inicial)', session.user.id);
         const { data, error } = await supabase
           .from('company_users')
           .select('company_id, company:company_id(name), role')
           .eq('user_id', session.user.id);
 
         if (!error && (!data || data.length !== 1)) {
-        sessionStorage.setItem('loginError', 'no_company_assoc'); // Define a flag de erro
-        console.warn(`Usuário ${session.user.id} não possui associação única de empresa válida. Deslogando.`);
-        await signOut();
-        return;
-      }
+          sessionStorage.setItem('loginError', 'no_company_assoc'); // Define a flag de erro
+          console.warn(`Usuário ${session.user.id} não possui associação única de empresa válida. Deslogando.`);
+          await signOut();
+          return;
+        }
 
         if (!error && data && data.length === 1) {
           const companyData = data[0];
           const company: Company = {
             id: companyData.company_id,
             name: companyData.company?.name || '',
-            role: companyData.role || 'user',
+            role: companyData.role === 'admin' ? 'admin' : 'user',
           };
+          console.log('[AuthContext] Empresa associada encontrada (sessão inicial):', company);
           setActiveCompany(company);
           localStorage.setItem('activeCompany', JSON.stringify(company));
         }
       }
+    }).catch((err) => {
+      console.error('[AuthContext] Erro ao carregar sessão inicial:', err);
+      setLoading(false);
+      console.log('[AuthContext] setLoading(false) chamado após erro na inicialização de sessão');
     });
 
     return () => {
@@ -162,6 +216,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
     localStorage.removeItem('activeCompany');
     setActiveCompany(null);
+    // Limpar todo o cache do React Query
+    queryClient.clear();
   };
 
   // Atualizar localStorage quando a empresa ativa mudar

@@ -51,6 +51,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { getProducts, createProduct, updateProduct, deleteProduct, Product, checkProductNameExists, checkProductSkuExists } from "@/services/productService";
 import { getGroups, getSubgroups, Group, Subgroup } from "@/services/groupService";
+import { useAuth } from '@/contexts/AuthContext';
 import { formatCurrency, formatDecimal } from "@/lib/formatters";
 import { parseDecimalBR, formatInputDecimalBR } from "@/lib/numberUtils";
 import { EnhancedAutocomplete } from "@/components/ui/enhanced-autocomplete";
@@ -70,9 +71,15 @@ function Products() {
   const [filteredSubgroups, setFilteredSubgroups] = useState<Subgroup[]>([]);
   const navigate = useNavigate();
 
+  const { activeCompany, loading: authLoading } = useAuth();
+
   const fetchGroups = async () => {
+    if (authLoading || !activeCompany?.id) {
+      toast.error("Empresa ativa não carregada. Tente novamente mais tarde.");
+      return;
+    }
     try {
-      const groupsData = await getGroups();
+      const groupsData = await getGroups(activeCompany.id);
       setGroups((groupsData ?? []).filter(Boolean));
     } catch (error) {
       if (error instanceof Error) {
@@ -85,8 +92,12 @@ function Products() {
   };
 
   const fetchSubgroups = async () => {
+    if (authLoading || !activeCompany?.id) {
+      toast.error("Empresa ativa não carregada. Tente novamente mais tarde.");
+      return;
+    }
     try {
-      const subgroupsData = await getSubgroups();
+      const subgroupsData = await getSubgroups(activeCompany.id);
       setSubgroups((subgroupsData ?? []).filter(Boolean));
     } catch (error) {
       if (error instanceof Error) {
@@ -99,9 +110,13 @@ function Products() {
   };
 
   const fetchProducts = async () => {
+    if (authLoading || !activeCompany?.id) {
+      toast.error("Empresa ativa não carregada. Tente novamente mais tarde.");
+      return;
+    }
     setLoading(true);
     try {
-      const productsData = await getProducts();
+      const productsData = await getProducts(activeCompany.id);
       setProducts(productsData);
       setLastUpdated(new Date());
     } catch (error) {
@@ -162,10 +177,13 @@ function Products() {
 
   const handleEditSubmit = async (formData: Omit<Product, 'id'>) => {
     if (!selectedProduct) return;
-
+    if (authLoading || !activeCompany?.id) {
+      toast.error("Empresa ativa não carregada. Tente novamente mais tarde.");
+      return;
+    }
     setLoading(true);
     try {
-      await updateProduct(selectedProduct.id, formData);
+      await updateProduct(selectedProduct.id, formData, activeCompany.id);
       toast.success("Produto atualizado com sucesso!");
 
       setProducts((prev) =>

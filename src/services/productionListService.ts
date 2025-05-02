@@ -56,11 +56,12 @@ interface ListaAutomaticaItem {
 interface ProductionListInsert {
   id: string;
   name: string;
-  user_id: string;
+  user_id: string | null; // Mudando para string | null
   created_at: string;
   updated_at: string;
   description: string | null;
   type: 'daily' | 'custom';
+  company_id: string;
 }
 
 interface ProductionListItemInsert {
@@ -68,50 +69,60 @@ interface ProductionListItemInsert {
   list_id: string;
   product_id: string;
   quantity: number;
-  unit: string;
-  created_at: string;
-  updated_at: string;
+  unit: 'KG' | 'UN'; // Limitando as unidades possíveis
+  created_at: string; // Alterando para string
+  updated_at: string; // Alterando para string
+  company_id: string; // Adicionando company_id como obrigatório
 }
 
 // Função para verificar se uma lista já existe
 // Retorna todos os IDs encontrados (array)
-async function verificarListasExistentes(userId: string | null, nomeLista: string): Promise<string[]> {
+async function verificarListasExistentes(userId: string | null, nomeLista: string, companyId: string): Promise<string[]> {
   let query = supabase
     .from("production_lists")
     .select("id")
-    .eq("name", nomeLista);
+    .eq("name", nomeLista)
+    .eq("company_id", companyId);
+  
   if (userId === null) {
     query = query.is("user_id", null);
   } else {
     query = query.eq("user_id", userId);
   }
+
   const { data } = await query;
   if (!data) return [];
-  return Array.isArray(data) ? data.map(d => d.id) : [data.id];
+  
+  // Verifica se data é um array
+  if (!Array.isArray(data)) return [data.id];
+  
+  return data.map(d => d.id);
 }
 
 // Deleta uma lista e seus itens
-async function deletarLista(listId: string) {
-  await deletarItensLista(listId);
-  await supabase.from("production_lists").delete().eq("id", listId);
+async function deletarLista(listId: string, companyId: string) {
+  await deletarItensLista(listId, companyId);
+  await supabase.from("production_lists").delete().eq("id", listId).eq("company_id", companyId);
 }
 
 // Função para deletar itens de uma lista existente
-async function deletarItensLista(listId: string): Promise<void> {
+async function deletarItensLista(listId: string, companyId: string): Promise<void> {
   const { error } = await supabase
     .from("production_list_items")
     .delete()
-    .eq("list_id", listId);
+    .eq("list_id", listId)
+    .eq("company_id", companyId);
   
   if (error) throw error;
 }
 
 // Função para atualizar uma lista existente
-async function atualizarLista(listId: string, updatedAt: string): Promise<void> {
+async function atualizarLista(listId: string, updatedAt: string, companyId: string): Promise<void> {
   const { error } = await supabase
     .from("production_lists")
     .update({ updated_at: updatedAt })
-    .eq("id", listId);
+    .eq("id", listId)
+    .eq("company_id", companyId);
   
   if (error) throw error;
 }
@@ -126,7 +137,7 @@ async function criarNovaLista(listData: ProductionListInsert): Promise<void> {
 }
 
 // Função para inserir itens em uma lista
-async function inserirItensLista(items: ProductionListItemInsert[]): Promise<void> {
+async function inserirItensLista(items: (ProductionListItemInsert & { company_id: string })[]): Promise<void> {
   const { error } = await supabase
     .from("production_list_items")
     .insert(items);
@@ -134,11 +145,105 @@ async function inserirItensLista(items: ProductionListItemInsert[]): Promise<voi
   if (error) throw error;
 }
 
+// Função utilitária para sobrescrever ou criar lista diária (upsert)
+async function upsertDailyProductionList(
+  listaAutomatica: ListaAutomaticaItem[],
+  nomeLista: string,
+  companyId: string
+): Promise<{ success: boolean, listId: string }> {
+  const now = new Date().toISOString();
+  console.log(`[upsertDailyProductionList] Iniciando processamento para nomeLista: ${nomeLista}, companyId: ${companyId}`);
+  console.log(`[upsertDailyProductionList] Itens a processar:`, listaAutomatica);
+
+  // Buscar lista existente (type='daily', nome, companyId)
+  const { data: existingList, error } = await supabase
+    .from("production_lists")
+    .select("id")
+    .eq("company_id", companyId)
+    .eq("name", nomeLista)
+    .eq("type", "daily")
+    .single();
+
+  if (error) {
+    console.error(`[upsertDailyProductionList] Erro ao buscar lista existente:`, error);
+    throw error;
+  }
+
+  let listId: string;
+  if (existingList && existingList.id) {
+    console.log(`[upsertDailyProductionList] Lista existente encontrada com ID: ${existingList.id}`);
+    // Se existir, sobrescreve
+    listId = existingList.id;
+    
+    // Log antes da exclusão
+    console.log(`[upsertDailyProductionList] Tentando deletar itens para listId: ${listId}`);
+
+    // Estratégia 'Excluir e Incluir' para listas diárias
+    // Exclui todos os itens antigos da lista diária antes de inserir os novos
+    const { data: deleteData, error: deleteError } = await supabase
+      .from('production_list_items')
+      .delete()
+      .eq('list_id', listId);
+
+    if (deleteError) {
+      console.error(`[upsertDailyProductionList] ERRO ao deletar itens para listId ${listId}:`, deleteError);
+      throw deleteError;
+    } else {
+      console.log(`[upsertDailyProductionList] Sucesso ao deletar itens para listId ${listId}`);
+    }
+    const itemsToInsert = listaAutomatica.map(item => ({
+      id: uuidv4(),
+      list_id: listId,
+      product_id: item.product_id,
+      quantity: item.quantity,
+      unit: item.unit.toUpperCase() as 'KG' | 'UN',
+      created_at: now,
+      updated_at: now,
+      company_id: companyId
+    }));
+
+    console.log(`[upsertDailyProductionList] Itens a serem inseridos (total: ${itemsToInsert.length}):`, itemsToInsert);
+
+    await inserirItensLista(itemsToInsert);
+    await atualizarLista(listId, now, companyId);
+    console.log(`[upsertDailyProductionList] Lista atualizada com sucesso. ID: ${listId}`);
+    return { success: true, listId };
+  } else {
+    console.log(`[upsertDailyProductionList] Criando nova lista com nome: ${nomeLista}`);
+    // Se não existir, cria nova
+    listId = uuidv4();
+    const listData: ProductionListInsert & { company_id: string } = {
+      id: listId,
+      name: nomeLista,
+      user_id: null,
+      created_at: now,
+      updated_at: now,
+      description: "Gerada automaticamente pelo calendário de produção",
+      type: 'daily',
+      company_id: companyId
+    };
+    await criarNovaLista(listData);
+    const itemsToInsert = listaAutomatica.map(item => ({
+      id: uuidv4(),
+      list_id: listId,
+      product_id: item.product_id,
+      quantity: item.quantity,
+      unit: item.unit.toUpperCase() as 'KG' | 'UN',
+      created_at: now,
+      updated_at: now,
+      company_id: companyId
+    }));
+    await inserirItensLista(itemsToInsert);
+    return { success: true, listId };
+  }
+}
+
 // Função principal para salvar pré-lista automática
 export async function salvarPreListaAutomatica(
   listaAutomatica: ListaAutomaticaItem[], 
   userId: string, 
   nomeLista: string,
+  companyId: string,
   type: 'daily' | 'custom' = 'custom'
 ) {
   const listaId = uuidv4();
@@ -146,22 +251,23 @@ export async function salvarPreListaAutomatica(
   
   try {
     // Verificar se já existe uma lista com o mesmo nome para o mesmo usuário
-    const existingListIds = await verificarListasExistentes(userId, nomeLista);
+    const existingListIds = await verificarListasExistentes(userId, nomeLista, companyId);
 
     // Sempre delete todas as listas existentes antes de criar nova
     for (const id of existingListIds) {
-      await deletarLista(id);
+      await deletarLista(id, companyId);
     }
     
     // Preparar dados da nova lista
-    const listData: ProductionListInsert = { 
+    const listData: ProductionListInsert & { company_id: string } = { 
       id: listaId, 
       name: nomeLista, 
       user_id: userId, 
       created_at: now, 
       updated_at: now, 
       description: "Gerada automaticamente pelo calendário de produção",
-      type
+      type,
+      company_id: companyId
     };
     
     // Criar nova lista
@@ -173,9 +279,11 @@ export async function salvarPreListaAutomatica(
       list_id: listaId,
       product_id: item.product_id,
       quantity: item.quantity,
-      unit: item.unit,
+      // Garante que a unidade seja sempre KG ou UN maiúsculo
+      unit: item.unit.toUpperCase() as 'KG' | 'UN',
       created_at: now,
-      updated_at: now
+      updated_at: now,
+      company_id: companyId
     }));
     
     // Inserir novos itens
@@ -191,11 +299,18 @@ export async function salvarPreListaAutomatica(
 }
 
 // Buscar todas as listas de produção
-export async function getProductionLists(): Promise<ProductionList[]> {
+export async function getProductionLists(companyId: string | null | undefined): Promise<ProductionList[]> {
+  // Validação do companyId recebido
+  if (!companyId || typeof companyId !== 'string') { // Verifica se é nulo, indefinido ou não é string
+    console.warn("[getProductionLists] Tentativa de buscar listas sem companyId válido. companyId recebido:", companyId);
+    // Retorna array vazio para evitar erro na consulta ao Supabase
+    return [];
+  }
   try {
     const { data, error } = await supabase
       .from("production_lists")
       .select("*")
+      .eq("company_id", companyId)
       .order("created_at", { ascending: false });
     
     if (error) throw error;
@@ -209,12 +324,13 @@ export async function getProductionLists(): Promise<ProductionList[]> {
 }
 
 // Buscar itens de uma lista específica
-export async function getProductionListItems(listId: string): Promise<ProductionListItem[]> {
+export async function getProductionListItems(listId: string, companyId: string): Promise<ProductionListItem[]> {
   try {
     const { data, error } = await supabase
       .from("production_list_items")
       .select("*")
-      .eq("list_id", listId);
+      .eq("list_id", listId)
+      .eq("company_id", companyId);
     
     if (error) throw error;
     // Garantir que os dados retornados correspondam à interface ProductionListItem
@@ -226,16 +342,16 @@ export async function getProductionListItems(listId: string): Promise<Production
   }
 }
 
-// Esta função foi movida para a versão exportada abaixo
-
 // Buscar itens de uma lista com detalhes dos produtos
-export async function getProductionListItemsWithDetails(listId: string): Promise<any[]> {
+export async function getProductionListItemsWithDetails(listId: string, companyId: string): Promise<ProductionListItemWithDetails[]> {
   try {
+    if (!companyId || typeof companyId !== "string") return [];
     // 1. Buscar todos os itens da lista
     const { data: items, error: itemsError } = await supabase
       .from('production_list_items')
       .select('*')
-      .eq('list_id', listId);
+      .eq('list_id', listId)
+      .eq('company_id', companyId);
     if (itemsError) throw itemsError;
     if (!items || items.length === 0) return [];
 
@@ -244,7 +360,8 @@ export async function getProductionListItemsWithDetails(listId: string): Promise
     const { data: products, error: productsError } = await supabase
       .from('products')
       .select('*')
-      .in('id', productIds);
+      .in('id', productIds)
+      .eq('company_id', companyId);
     if (productsError) throw productsError;
 
     // 3. Buscar todas as receitas necessárias em lote
@@ -278,8 +395,8 @@ export async function getProductionListItemsWithDetails(listId: string): Promise
 
 // Criar nova lista de produção
 export async function createProductionList(
-  listData: Omit<ProductionList, 'id' | 'created_at' | 'updated_at'>,
-  itemsData: Omit<ProductionListItem, 'id' | 'list_id' | 'created_at' | 'updated_at'>[]
+  listData: Omit<ProductionList, 'id' | 'created_at' | 'updated_at'> & { companyId: string },
+  itemsData: (Omit<ProductionListItem, 'id' | 'list_id' | 'created_at' | 'updated_at'> & { companyId?: string })[]
 ): Promise<{ success: boolean, listId?: string, error?: any }> {
   try {
     const listId = uuidv4();
@@ -293,7 +410,8 @@ export async function createProductionList(
       created_at: now,
       updated_at: now,
       description: listData.description,
-      type: listData.type
+      type: listData.type,
+      company_id: listData.companyId
     };
     
     // Inserir lista
@@ -312,7 +430,8 @@ export async function createProductionList(
         quantity: item.quantity,
         unit: item.unit,
         created_at: now,
-        updated_at: now
+        updated_at: now,
+        company_id: listData.companyId
       }));
       
       const { error: itemsError } = await supabase
@@ -335,7 +454,8 @@ export async function createProductionList(
 export async function updateProductionList(
   listId: string,
   listData: Partial<Omit<ProductionList, 'id' | 'created_at' | 'user_id'>>,
-  itemsData?: Omit<ProductionListItem, 'id' | 'list_id' | 'created_at' | 'updated_at'>[]
+  companyId: string,
+  itemsData?: (Omit<ProductionListItem, 'id' | 'list_id' | 'created_at' | 'updated_at'> & { companyId?: string })[]
 ): Promise<{ success: boolean, error?: any }> {
   try {
     const now = new Date().toISOString();
@@ -345,6 +465,7 @@ export async function updateProductionList(
       .from("production_lists")
       .select("*")
       .eq("id", listId)
+      .eq("company_id", companyId)
       .single();
     
     if (!existingList) {
@@ -363,14 +484,15 @@ export async function updateProductionList(
     const { error: listError } = await supabase
       .from("production_lists")
       .update({ ...listData, updated_at: now })
-      .eq("id", listId);
+      .eq("id", listId)
+      .eq("company_id", companyId);
     
     if (listError) throw listError;
     
     // Se fornecidos novos itens, atualizar
     if (itemsData) {
       // Remover itens existentes usando a função auxiliar
-      await deletarItensLista(listId);
+      await deletarItensLista(listId, companyId);
       
       // Inserir novos itens
       if (itemsData.length > 0) {
@@ -381,7 +503,8 @@ export async function updateProductionList(
           quantity: item.quantity,
           unit: item.unit,
           created_at: now,
-          updated_at: now
+          updated_at: now,
+          company_id: companyId
         }));
         
         const { error: insertError } = await supabase
@@ -402,13 +525,14 @@ export async function updateProductionList(
 }
 
 // Excluir lista e seus itens
-export async function deleteProductionList(listId: string): Promise<{ success: boolean, error?: any }> {
+export async function deleteProductionList(listId: string, companyId: string): Promise<{ success: boolean, error?: any }> {
   try {
     // Verificar se a lista existe
     const { data } = await supabase
       .from("production_lists")
       .select("*")
       .eq("id", listId)
+      .eq("company_id", companyId)
       .single();
     
     if (!data) {
@@ -424,13 +548,14 @@ export async function deleteProductionList(listId: string): Promise<{ success: b
     }
     
     // Primeiro, excluir os itens da lista (usando função auxiliar já criada)
-    await deletarItensLista(listId);
+    await deletarItensLista(listId, companyId);
     
     // Em seguida, excluir a própria lista
     const { error } = await supabase
       .from("production_lists")
       .delete()
-      .eq("id", listId);
+      .eq("id", listId)
+      .eq("company_id", companyId);
     
     if (error) throw error;
     
@@ -444,10 +569,11 @@ export async function deleteProductionList(listId: string): Promise<{ success: b
 }
 
 // Calcular quantidade baseada no rendimento da receita
-export async function calculateProductQuantity(productId: string): Promise<{quantity: number, unit: string}> {
+export async function calculateProductQuantity(productId: string, companyId: string): Promise<{quantity: number, unit: string}> {
+  if (!companyId) throw new Error('[calculateProductQuantity] companyId é obrigatório');
   try {
     // Buscar o produto com detalhes
-    const product = await getProduct(productId);
+    const product = await getProduct(productId, companyId);
     if (!product) throw new Error(`Produto não encontrado: ${productId}`);
     
     // Definir a unidade baseada no produto
@@ -455,27 +581,23 @@ export async function calculateProductQuantity(productId: string): Promise<{quan
     
     // Se for receita ou subreceita, buscar os dados da receita para obter rendimento
     if ((product.product_type === 'receita' || product.product_type === 'subreceita') && product.recipe_id) {
-      const recipe = await getRecipe(product.recipe_id);
+      const recipe = await getRecipe(product.recipe_id, companyId);
       if (recipe) {
-        // Usar o rendimento apropriado baseado na unidade
-        if (unit === 'KG' && recipe.yield_kg) {
-          return { quantity: recipe.yield_kg, unit };
-        } else if (unit === 'UN' && recipe.yield_units) {
-          return { quantity: recipe.yield_units, unit };
-        }
+        if (unit === 'KG' && recipe.yield_kg) return { quantity: recipe.yield_kg, unit };
+        else if (unit === 'UN' && recipe.yield_units) return { quantity: recipe.yield_units, unit };
       }
     }
-    
-    // Fallback: se não conseguir determinar a quantidade ideal
+    // Fallback
     return { quantity: 1, unit };
   } catch (error) {
     console.error(`Erro ao calcular quantidade para produto ${productId}:`, error);
-    return { quantity: 1, unit: 'KG' };
+    throw error;
   }
 }
 
 // Gerar/atualizar as 7 listas diárias
-export async function generateDailyLists(userId?: string): Promise<{ success: boolean, lists?: string[], error?: any }> {
+export async function generateDailyLists(companyId: string, userId?: string): Promise<{ success: boolean, lists?: string[], error?: any }> {
+  if (!companyId) throw new Error('[generateDailyLists] companyId é obrigatório');
   try {
     // Se não houver userId, apenas gere listas globais (ou para teste)
     // if (!userId) throw new Error("Usuário não autenticado");
@@ -520,7 +642,7 @@ export async function generateDailyLists(userId?: string): Promise<{ success: bo
       
       for (const product of dayProducts) {
         // Calcular quantidade baseada no rendimento
-        const { quantity, unit } = await calculateProductQuantity(product.id);
+        const { quantity, unit } = await calculateProductQuantity(product.id, companyId);
         
         items.push({
           product_id: product.id,
@@ -532,8 +654,8 @@ export async function generateDailyLists(userId?: string): Promise<{ success: bo
       // Criar nome para a lista diária
       const nomeLista = `Produção de ${day.name}`;
       
-      // Salvar a lista no banco de dados com tipo 'daily'
-      const result = await salvarPreListaAutomatica(items, userId ?? null, nomeLista, 'daily');
+      // Salvar/atualizar a lista no banco de dados com tipo 'daily' (upsert)
+      const result = await upsertDailyProductionList(items, nomeLista, companyId);
       
       if (result.success && result.listId) {
         createdLists.push(result.listId);

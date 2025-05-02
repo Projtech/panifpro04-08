@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import ProductForm from '@/components/ProductForm';
 import { createProduct } from '@/services/productService';
 import { getGroups, getSubgroups, Group, Subgroup } from "@/services/groupService";
+import { useAuth } from '@/contexts/AuthContext';
 import { Database } from '@/integrations/supabase/types';
 import { Loader2 } from 'lucide-react';
 
@@ -18,49 +19,78 @@ function NovoProduto() {
   const [subgroups, setSubgroups] = useState<Subgroup[]>([]);
   const [initialLoading, setInitialLoading] = useState(true); // Loading state for initial data fetch
 
+  const { activeCompany, loading: authLoading } = useAuth();
+
   // Fetch groups and subgroups on component mount
   useEffect(() => {
+    // Use AbortController for cleanup
+    const abortController = new AbortController();
+    const signal = abortController.signal;
+
     const loadDropdownData = async () => {
+      if (authLoading || !activeCompany?.id) return;
       try {
+        // Pass signal to fetch functions if they support it.
+        // Assuming getGroups/getSubgroups might not support it directly,
+        // we check the signal before setting state.
         const [fetchedGroups, fetchedSubgroups] = await Promise.all([
-          getGroups(),
-          getSubgroups()
+          getGroups(activeCompany.id), // If getGroups supported signal: getGroups(activeCompany.id, { signal })
+          getSubgroups(activeCompany.id) // If getSubgroups supported signal: getSubgroups(activeCompany.id, { signal })
         ]);
-        setGroups(fetchedGroups);
-        setSubgroups(fetchedSubgroups);
-      } catch (error) {
-        console.error("Erro ao buscar dados para formulário:", error);
-        toast.error("Falha ao carregar opções de grupo/subgrupo.");
-        // Optionally navigate back or show an error state
+
+        // Only update state if the component is still mounted
+        if (!signal.aborted) {
+          setGroups(fetchedGroups);
+          setSubgroups(fetchedSubgroups);
+        }
+      } catch (error: any) {
+        // Don't update state or show toast if aborted
+        if (!signal.aborted) {
+          console.error("Erro ao buscar dados para formulário:", error);
+          toast.error("Falha ao carregar opções de grupo/subgrupo.");
+          // Optionally navigate back or show an error state
+        }
       } finally {
-        setInitialLoading(false);
+        // Only update loading state if the component is still mounted
+        if (!signal.aborted) {
+          setInitialLoading(false);
+        }
       }
     };
+
     loadDropdownData();
-  }, []);
+
+    // Cleanup function
+    return () => {
+      abortController.abort(); // Abort fetch requests on unmount
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading, activeCompany?.id]);
 
   // Handle form submission (creation)
   const handleCreateSubmit = async (formData: ProductFormData) => {
+    if (authLoading || !activeCompany?.id) {
+      toast.error("Empresa ativa não carregada. Tente novamente mais tarde.");
+      return;
+    }
     setLoading(true);
     try {
       console.log('[handleCreateSubmit] Payload recebido do ProductForm:', formData);
-      const newProduct = await createProduct(formData);
-      if (newProduct) {
-          toast.success(`Produto "${newProduct.name}" criado com sucesso!`);
-          // Navigate back to the products list after successful creation
-          navigate('/products'); // Or navigate(-1) to go back
-      } else {
-          // Handle cases where createProduct might return null/undefined without throwing an error
-          toast.error("Falha ao criar produto. Resposta inesperada do servidor.");
+      const newProduct = await createProduct(formData, activeCompany.id);
+      if (!newProduct) {
+        throw new Error("Falha ao criar produto. Resposta inesperada do servidor.");
       }
-    } catch (error) {
+      toast.success(`Produto "${newProduct.name}" criado com sucesso!`);
+      // Navigate back to the products list after successful creation
+      navigate('/products'); // Or navigate(-1) to go back
+    } catch (error: any) {
       console.error('[handleCreateSubmit] Erro ao criar produto:', error);
-      // More specific error handling could be added here based on error types
-      toast.error("Erro ao criar produto. Verifique os dados ou o console.");
+      toast.error(`Falha ao criar produto: ${error.message || 'Erro desconhecido'}`);
     } finally {
       setLoading(false);
     }
   };
+
 
   if (initialLoading) {
     return (
@@ -107,7 +137,6 @@ function NovoProduto() {
         groups={groups}
         subgroups={subgroups}
         isEditMode={false}
-        initialData={null} // Explicitly pass null for new product
       />
       {/* Remove the cancel button here as ProductForm has its own */}
       {/* <button className="mt-4 btn" onClick={() => navigate(-1)}>Cancelar</button> */}

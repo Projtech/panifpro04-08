@@ -6,10 +6,10 @@ import { getRecipeWithIngredients } from "./recipeService";
 
 export type PdfType = "simple" | "complete" | "costs";
 
-export async function generateRecipePdf(recipeId: string, type: PdfType): Promise<void> {
+export async function generateRecipePdf(companyId: string, recipeId: string, type: PdfType): Promise<void> {
   try {
     // Fetch recipe data
-    const { recipe, ingredients } = await getRecipeWithIngredients(recipeId);
+    const { recipe, ingredients } = await getRecipeWithIngredients(recipeId, companyId);
     
     if (!recipe) {
       throw new Error("Recipe not found");

@@ -42,36 +42,18 @@ export function Login() {
       
       if (error) throw error;
       
-      if (data.user) {
-        // Verificar se usuário tem empresa associada
-        const { data: companyData, error: companyError } = await supabase
-          .from('company_users')
-          .select('company_id, role, companies(id, name)')
-          .eq('user_id', data.user.id);
-          
-        if (companyError) throw companyError;
-        
-        if (!companyData || companyData.length === 0) {
-          // Se não tiver empresa, redirecionar para página de seleção/cadastro
-          navigate('/select-company');
-        } else if (companyData.length === 1) {
-          // Se tiver apenas uma empresa, redirecionar para o dashboard
-          // Salvar empresa ativa e role no localStorage
-          localStorage.setItem('activeCompany', JSON.stringify({
-            id: companyData[0].company_id,
-            name: companyData[0].companies.name,
-            role: companyData[0].role
-          }));
-          navigate('/dashboard');
-        } else {
-          // Se tiver múltiplas empresas, redirecionar para seleção
-          navigate('/select-company');
-        }
-      }
+      // Após login bem-sucedido, navegue diretamente para o dashboard.
+      // O AuthContext e ProtectedRoute cuidarão do resto.
+      navigate('/dashboard');
     } catch (error: any) {
+      let userMessage = "Erro ao fazer login. Verifique seu e-mail e senha e tente novamente.";
+      if (error?.message?.toLowerCase().includes("invalid login credentials") ||
+          error?.message?.toLowerCase().includes("invalid email or password")) {
+        userMessage = "E-mail ou senha incorretos. Por favor, tente novamente.";
+      }
       toast({
-        title: "Erro ao fazer login",
-        description: error.message || "Verifique suas credenciais e tente novamente.",
+        title: "Não foi possível entrar",
+        description: userMessage,
         variant: "destructive"
       });
     } finally {

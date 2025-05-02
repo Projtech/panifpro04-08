@@ -109,14 +109,36 @@ const SubgroupDialog: React.FC<SubgroupDialogProps> = ({
             Cancelar
           </Button>
           <Button
-            onClick={onSave}
+            onClick={() => {
+              onSave();
+              // Resetar o formulário após salvar
+              setSubgroupForm({
+                id: '',
+                name: '',
+                description: '',
+                group_id: ''
+              });
+            }}
             disabled={loading}
             className="bg-bakery-amber hover:bg-bakery-amber/90 text-white"
           >
             {loading ? (
               <Loader2 className="h-4 w-4 animate-spin mr-2" />
             ) : null}
-            Salvar
+            Salvar e Novo
+          </Button>
+          <Button
+            onClick={() => {
+              onSave();
+              onOpenChange(false);
+            }}
+            disabled={loading}
+            className="bg-bakery-amber hover:bg-bakery-amber/90 text-white"
+          >
+            {loading ? (
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            ) : null}
+            Salvar e Fechar
           </Button>
         </DialogFooter>
       </DialogContent>

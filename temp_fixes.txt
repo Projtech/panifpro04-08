@@ -1,0 +1,14 @@
+Linha 359 (createRecipe):
+const createdProduct = await createProduct(newProduct, companyId);
+
+Linha 485 (updateRecipe):
+const createdProduct = await createProduct(newProduct, companyId);
+
+Linha 572 (updateAllRecipesCosts):
+await updateRecipeCost(recipe.id, companyId);
+
+Linha 576 (updateAllRecipesCosts):
+await updateRecipeCost(recipe.id, companyId);
+
+Linha 590 (updateRecipeCost):
+const { recipe, ingredients } = await getRecipeWithIngredients(recipeId, companyId);

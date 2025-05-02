@@ -10,14 +10,16 @@ import {
   toDbTransactionType
 } from "./inventoryTypes";
 
-export async function getInventoryTransactions(): Promise<InventoryTransactionWithProduct[]> {
+export async function getInventoryTransactions(companyId: string): Promise<InventoryTransactionWithProduct[]> {
+  if (!companyId) throw new Error('[getInventoryTransactions] companyId é obrigatório');
   console.log("Fetching all inventory transactions...");
   try {
     const { data, error } = await supabase
       .from('inventory_transactions')
       .select('*, product:products(*)')
-      .order('date', { ascending: false }) // Sort by date descending (newest first)
-      .order('created_at', { ascending: false }); // Secondary sorting by creation timestamp
+      .eq('company_id', companyId)
+      .order('date', { ascending: false })
+      .order('created_at', { ascending: false });
     
     if (error) throw error;
     
@@ -31,9 +33,60 @@ export async function getInventoryTransactions(): Promise<InventoryTransactionWi
   }
 }
 
+// ---
+// Função para atualizar transação de inventário (multi-empresa)
+export async function updateInventoryTransaction(
+  transactionId: string,
+  updates: Partial<Omit<InventoryTransaction, 'id' | 'company_id'>>,
+  companyId: string
+): Promise<boolean> {
+  if (!companyId) throw new Error('[updateInventoryTransaction] companyId é obrigatório');
+  try {
+    // Nunca permitir alteração do company_id!
+    if ('company_id' in updates) {
+      delete (updates as any).company_id;
+    }
+    const { error } = await supabase
+      .from('inventory_transactions')
+      .update(updates)
+      .eq('id', transactionId)
+      .eq('company_id', companyId);
+    if (error) throw error;
+    toast.success('Movimentação de estoque atualizada com sucesso');
+    return true;
+  } catch (error) {
+    console.error('[INVENTORY] Error updating transaction:', error);
+    toast.error('Erro ao atualizar movimentação de estoque');
+    return false;
+  }
+}
+
+// Função para deletar transação de inventário (multi-empresa)
+export async function deleteInventoryTransaction(
+  transactionId: string,
+  companyId: string
+): Promise<boolean> {
+  if (!companyId) throw new Error('[deleteInventoryTransaction] companyId é obrigatório');
+  try {
+    const { error } = await supabase
+      .from('inventory_transactions')
+      .delete()
+      .eq('id', transactionId)
+      .eq('company_id', companyId);
+    if (error) throw error;
+    toast.success('Movimentação de estoque excluída com sucesso');
+    return true;
+  } catch (error) {
+    console.error('[INVENTORY] Error deleting transaction:', error);
+    toast.error('Erro ao excluir movimentação de estoque');
+    return false;
+  }
+}
+// ---
 // Updated function signature to be clear about what type parameters we accept
 export async function addInventoryTransaction(
   transaction: {
+    companyId: string; // Novo parâmetro obrigatório para multi-empresa
     product_id: string;
     quantity: number;
     date: string;
@@ -45,6 +98,7 @@ export async function addInventoryTransaction(
     production_order_id: string | null;
   }
 ): Promise<InventoryTransaction | null> {
+  if (!transaction.companyId) throw new Error('[addInventoryTransaction] companyId é obrigatório');
   try {
     console.log("[INVENTORY] Adding transaction:", JSON.stringify({
       product_id: transaction.product_id,
@@ -55,9 +109,11 @@ export async function addInventoryTransaction(
     }, null, 2));
     
     // Always convert to database format ('entrada'/'saida')
+    const { companyId, ...rest } = transaction;
     const dbTransaction = {
-      ...transaction,
-      type: toDbTransactionType(transaction.type) // Always convert to DB type
+      ...rest,
+      type: toDbTransactionType(transaction.type),
+      company_id: companyId // Garante multi-tenant
     };
     
     // Insert transaction

@@ -8,23 +8,15 @@ import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 
 export function ResetPassword() {
+  console.log('ResetPassword component montado');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+
   const { toast } = useToast();
   const navigate = useNavigate();
 
-  // Recupera o access_token do hash da URL
-  useEffect(() => {
-    const hash = window.location.hash;
-    if (hash && hash.includes('access_token')) {
-      const params = new URLSearchParams(hash.replace('#', '?'));
-      const access_token = params.get('access_token');
-      if (access_token) {
-        supabase.auth.setSession({ access_token, refresh_token: params.get('refresh_token') || '' });
-      }
-    }
-  }, []);
+
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();

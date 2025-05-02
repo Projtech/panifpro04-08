@@ -11,6 +11,8 @@ import {
 } from "@/components/ui/dialog";
 import { PlusCircle, Search, Loader2 } from "lucide-react";
 import { getInventoryTransactions } from "@/services/inventory/transactionService";
+import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
 import { getProductInventory } from "@/services/inventory/productInventoryService";
 import { InventoryTransactionWithProduct, ProductInventory } from "@/services/inventory/inventoryTypes";
 import { getProducts, Product } from "@/services/productService";
@@ -21,6 +23,7 @@ import TransactionHistoryTable from "@/components/Inventory/TransactionHistoryTa
 import TransactionForm from "@/components/Inventory/TransactionForm";
 
 export default function Inventory() {
+  const { activeCompany, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(false);
   const [inventory, setInventory] = useState<ProductInventory[]>([]);
   const [transactions, setTransactions] = useState<InventoryTransactionWithProduct[]>([]);
@@ -30,17 +33,22 @@ export default function Inventory() {
   
   // Load inventory data
   const fetchData = async () => {
+    if (authLoading || !activeCompany?.id) {
+      toast.error('Empresa ativa não carregada. Tente novamente mais tarde.');
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       console.log("Fetching inventory data...");
       
       // Get current inventory
-      const inventoryData = await getProductInventory();
+      const inventoryData = await getProductInventory(activeCompany.id);
       console.log("Inventory data:", inventoryData);
       setInventory(inventoryData);
       
       // Get transaction history
-      const transactionsData = await getInventoryTransactions();
+      const transactionsData = await getInventoryTransactions(activeCompany.id);
       console.log("Transaction data:", transactionsData);
       setTransactions(transactionsData);
       

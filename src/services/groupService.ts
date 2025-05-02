@@ -1,18 +1,22 @@
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
+// Interfaces (adicionando company_id opcional para consistência, embora não estritamente usado em todas as funções)
 export interface Group {
   id: string;
   name: string;
   description: string | null;
   created_at: string | null;
+  company_id?: string; // Adicionado para refletir a coluna do DB
 }
 
 export interface Subgroup extends Omit<Group, 'id'> {
   id: string;
   group_id: string;
+  company_id?: string; // Adicionado para refletir a coluna do DB
 }
 
+// Tipos para dados de formulário não mudam
 export interface GroupData {
   name: string;
   description: string | null;
@@ -22,7 +26,12 @@ export interface SubgroupData extends GroupData {
   group_id: string;
 }
 
-export async function getGroups(): Promise<Group[]> {
+// --- FUNÇÕES CORRIGIDAS ---
+
+// LEITURA
+export async function getGroups(companyId: string): Promise<Group[]> {
+  if (!companyId) throw new Error('[getGroups] companyId é obrigatório');
+  // Adicionado parâmetro companyId
   try {
     const { data, error } = await supabase
       .from('groups')
@@ -31,10 +40,11 @@ export async function getGroups(): Promise<Group[]> {
         subgroups (
           *
         )
-      `);
-    
+      `)
+      .eq('company_id', companyId); // Adicionado filtro company_id
+
     if (error) throw error;
-    
+
     return (data || []) as Group[];
   } catch (error) {
     console.error("Error fetching groups:", error);
@@ -43,18 +53,25 @@ export async function getGroups(): Promise<Group[]> {
   }
 }
 
-export async function getSubgroups(groupId?: string): Promise<Subgroup[]> {
+export async function getSubgroups(companyId: string, groupId?: string): Promise<Subgroup[]> {
+  if (!companyId || typeof companyId !== "string") {
+    throw new Error('[getSubgroups] companyId é obrigatório');
+  }
+  // Adicionado parâmetro companyId (como primeiro argumento)
   try {
-    let query = supabase.from('subgroups').select('*');
-    
+    let query = supabase
+      .from('subgroups')
+      .select('*')
+      .eq('company_id', companyId); // Adicionado filtro company_id
+
     if (groupId) {
       query = query.eq('group_id', groupId);
     }
-    
+
     const { data, error } = await query;
-    
+
     if (error) throw error;
-    
+
     return (data || []) as Subgroup[];
   } catch (error) {
     console.error("Error fetching subgroups:", error);
@@ -63,16 +80,19 @@ export async function getSubgroups(groupId?: string): Promise<Subgroup[]> {
   }
 }
 
-export async function createGroup(groupData: GroupData): Promise<Group | null> {
+// INSERÇÃO
+export async function createGroup(groupData: GroupData, companyId: string): Promise<Group | null> {
+  if (!companyId) throw new Error('[createGroup] companyId é obrigatório');
+  // Adicionado parâmetro companyId
   try {
     const { data, error } = await supabase
       .from('groups')
-      .insert([groupData])
+      .insert([{ ...groupData, company_id: companyId }]) // Adicionado company_id aos dados
       .select()
       .single();
-    
+
     if (error) throw error;
-    
+
     toast.success("Grupo criado com sucesso");
     return data as Group;
   } catch (error) {
@@ -82,17 +102,24 @@ export async function createGroup(groupData: GroupData): Promise<Group | null> {
   }
 }
 
-export async function updateGroup(id: string, groupData: GroupData): Promise<Group | null> {
+// ATUALIZAÇÃO
+export async function updateGroup(id: string, groupData: GroupData, companyId: string): Promise<Group | null> {
+  if (!companyId) throw new Error('[updateGroup] companyId é obrigatório');
+  // Adicionado parâmetro companyId
   try {
+    // Garante que company_id não seja enviado nos dados de atualização
+    const { company_id, ...updateData } = groupData as any;
+
     const { data, error } = await supabase
       .from('groups')
-      .update(groupData)
+      .update(updateData)
       .eq('id', id)
+      .eq('company_id', companyId) // Adicionado filtro company_id
       .select()
       .single();
-    
+
     if (error) throw error;
-    
+
     toast.success("Grupo atualizado com sucesso");
     return data as Group;
   } catch (error) {
@@ -102,23 +129,30 @@ export async function updateGroup(id: string, groupData: GroupData): Promise<Gro
   }
 }
 
-export async function deleteGroup(id: string): Promise<boolean> {
+// EXCLUSÃO
+export async function deleteGroup(id: string, companyId: string): Promise<boolean> {
+  if (!companyId) throw new Error('[deleteGroup] companyId é obrigatório');
+  // Adicionado parâmetro companyId
   try {
+    // Primeiro deleta subgrupos associados (também filtrando por companyId)
     const { error: subgroupsError } = await supabase
       .from('subgroups')
       .delete()
-      .eq('group_id', id);
-    
+      .eq('group_id', id)
+      .eq('company_id', companyId); // Adicionado filtro company_id
+
     if (subgroupsError) throw subgroupsError;
-    
+
+    // Depois deleta o grupo (também filtrando por companyId)
     const { error } = await supabase
       .from('groups')
       .delete()
-      .eq('id', id);
-    
+      .eq('id', id)
+      .eq('company_id', companyId); // Adicionado filtro company_id
+
     if (error) throw error;
-    
-    toast.success("Grupo excluído com sucesso");
+
+    toast.success("Grupo e subgrupos associados excluídos com sucesso"); // Mensagem ajustada
     return true;
   } catch (error) {
     console.error("Error deleting group:", error);
@@ -127,16 +161,19 @@ export async function deleteGroup(id: string): Promise<boolean> {
   }
 }
 
-export async function createSubgroup(subgroupData: SubgroupData): Promise<Subgroup | null> {
+// INSERÇÃO SUBGRUPO
+export async function createSubgroup(subgroupData: SubgroupData, companyId: string): Promise<Subgroup | null> {
+  if (!companyId) throw new Error('[createSubgroup] companyId é obrigatório');
+  // Adicionado parâmetro companyId
   try {
     const { data, error } = await supabase
       .from('subgroups')
-      .insert([subgroupData])
+      .insert([{ ...subgroupData, company_id: companyId }]) // Adicionado company_id aos dados
       .select()
       .single();
-    
+
     if (error) throw error;
-    
+
     toast.success("Subgrupo criado com sucesso");
     return data as Subgroup;
   } catch (error) {
@@ -146,17 +183,24 @@ export async function createSubgroup(subgroupData: SubgroupData): Promise<Subgro
   }
 }
 
-export async function updateSubgroup(id: string, subgroupData: SubgroupData): Promise<Subgroup | null> {
+// ATUALIZAÇÃO SUBGRUPO
+export async function updateSubgroup(id: string, subgroupData: SubgroupData, companyId: string): Promise<Subgroup | null> {
+  if (!companyId) throw new Error('[updateSubgroup] companyId é obrigatório');
+  // Adicionado parâmetro companyId
   try {
+    // Garante que company_id não seja enviado nos dados de atualização
+    const { company_id, ...updateData } = subgroupData as any;
+
     const { data, error } = await supabase
       .from('subgroups')
-      .update(subgroupData)
+      .update(updateData)
       .eq('id', id)
+      .eq('company_id', companyId) // Adicionado filtro company_id
       .select()
       .single();
-    
+
     if (error) throw error;
-    
+
     toast.success("Subgrupo atualizado com sucesso");
     return data as Subgroup;
   } catch (error) {
@@ -166,15 +210,19 @@ export async function updateSubgroup(id: string, subgroupData: SubgroupData): Pr
   }
 }
 
-export async function deleteSubgroup(id: string): Promise<boolean> {
+// EXCLUSÃO SUBGRUPO
+export async function deleteSubgroup(id: string, companyId: string): Promise<boolean> {
+  if (!companyId) throw new Error('[deleteSubgroup] companyId é obrigatório');
+  // Adicionado parâmetro companyId
   try {
     const { error } = await supabase
       .from('subgroups')
       .delete()
-      .eq('id', id);
-    
+      .eq('id', id)
+      .eq('company_id', companyId); // Adicionado filtro company_id
+
     if (error) throw error;
-    
+
     toast.success("Subgrupo excluído com sucesso");
     return true;
   } catch (error) {

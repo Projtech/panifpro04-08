@@ -22,6 +22,7 @@ import {
 import { ArrowUpCircle, ArrowDownCircle } from "lucide-react";
 import { toast } from "sonner";
 import { addInventoryTransaction } from "@/services/inventory/transactionService";
+import { useAuth } from '@/contexts/AuthContext';
 import { TransactionType } from "@/services/inventory/inventoryTypes";
 import { Product } from "@/services/productService";
 
@@ -70,7 +71,12 @@ export default function TransactionForm({
     setNotes("");
   };
 
+  const { activeCompany, loading: authLoading } = useAuth();
   const handleTransactionSubmit = async () => {
+    if (authLoading || !activeCompany?.id) {
+      toast.error('Empresa ativa não carregada. Tente novamente mais tarde.');
+      return;
+    }
     if (!selectedProduct) {
       toast.error("Selecione um produto");
       return;
@@ -118,7 +124,7 @@ export default function TransactionForm({
         transactionData.notes = `Fornecedor: ${supplier}${notes ? ` - ${notes}` : ''}`;
       }
 
-      const result = await addInventoryTransaction(transactionData);
+      const result = await addInventoryTransaction({ ...transactionData, companyId: activeCompany.id });
       
       if (result) {
         console.log("Transaction added successfully:", result);

@@ -36,6 +36,7 @@ interface ProductionListFormProps {
   ) => Promise<void>;
   onCancel: () => void;
   isLoading?: boolean;
+  companyId: string;
 }
 
 export default function ProductionListForm({
@@ -44,6 +45,7 @@ export default function ProductionListForm({
   onSave,
   onCancel,
   isLoading = false,
+  companyId,
 }: ProductionListFormProps) {
   // Estados do formulário
   const [name, setName] = useState(initialData?.name || "");
@@ -65,9 +67,14 @@ export default function ProductionListForm({
   // Carregar produtos disponíveis
   useEffect(() => {
     const fetchProducts = async () => {
+      if (!companyId) {
+        console.error("ProductionListForm: companyId não fornecido via props.");
+        setLoadingProducts(false);
+        return;
+      }
       setLoadingProducts(true);
       try {
-        const productsData = await getProducts();
+        const productsData = await getProducts(companyId);
         // Filtrar apenas matérias-primas, receitas e subreceitas
         const filteredProducts = productsData.filter(
           p => p.product_type === 'materia_prima' || 
@@ -84,7 +91,7 @@ export default function ProductionListForm({
     };
 
     fetchProducts();
-  }, []);
+  }, [companyId]);
 
   // Carregar itens iniciais se estiver em modo de edição
   useEffect(() => {
@@ -156,7 +163,11 @@ export default function ProductionListForm({
       toast.error("Produto não encontrado");
       return;
     }
-
+    // Impedir adicionar matéria-prima
+    if (product.product_type === 'materia_prima') {
+      toast.error("Não é permitido adicionar matéria-prima em listas personalizadas. Apenas receitas e subreceitas.");
+      return;
+    }
     // Verificar se o produto já está na lista
     const existingItemIndex = items.findIndex(item => item.product_id === selectedProductId);
     
@@ -277,11 +288,13 @@ export default function ProductionListForm({
                     <span>Carregando...</span>
                   </div>
                 ) : (
-                  products.map(product => (
-                    <SelectItem key={product.id} value={product.id}>
-                      {product.name} ({product.unit})
-                    </SelectItem>
-                  ))
+                  products
+                    .filter(product => product.product_type === 'receita' || product.product_type === 'subreceita')
+                    .map(product => (
+                      <SelectItem key={product.id} value={product.id}>
+                        {product.name} ({product.unit})
+                      </SelectItem>
+                    ))
                 )}
               </SelectContent>
             </Select>

@@ -45,6 +45,7 @@ import {
   checkRecipeNameExists // Adicionar importação
 } from "@/services/recipeService";
 import { getGroups, getSubgroups, Group, Subgroup } from "@/services/groupService";
+import { useAuth } from '@/contexts/AuthContext';
 
 interface Ingredient {
   id: string;
@@ -60,6 +61,7 @@ interface Ingredient {
 }
 
 export default function RecipeForm() {
+  const { activeCompany, loading: authLoading } = useAuth();
   // ... outros hooks e estados
 
   // Novo: tipo do produto gerado por receita
@@ -126,20 +128,30 @@ export default function RecipeForm() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const productsData = await getProducts();
-        const recipesData = await getRecipes();
-        const groupsData = await getGroups();
-        const subgroupsData = await getSubgroups();
+        if (authLoading || !activeCompany?.id) {
+          toast.error("Empresa ativa não carregada. Tente novamente mais tarde.");
+          setLoading(false);
+          return;
+        }
+        const productsData = await getProducts(activeCompany.id);
+        const recipesData = await getRecipes(activeCompany.id);
+        const groupsData = await getGroups(activeCompany.id);
+        const subgroupsData = await getSubgroups(activeCompany.id);
         
         setProducts(productsData);
-        setSubRecipes(recipesData.filter(recipe => recipe.code === 'SUB')); // Filter sub-recipes
-        setExistingRecipes(recipesData); // Armazenar todas as receitas para o autocomplete
+        setSubRecipes(recipesData.filter(recipe => recipe.code === 'SUB'));
+        setExistingRecipes(recipesData);
         setGroups(groupsData);
         setSubgroups(subgroupsData);
         
         // If editing, load recipe data
         if (isEditing && id) {
-          const { recipe, ingredients: recipeIngredients } = await getRecipeWithIngredients(id);
+          if (!activeCompany?.id) {
+            toast.error("Empresa ativa não carregada. Tente novamente mais tarde.");
+            setLoading(false);
+            return;
+          }
+          const { recipe, ingredients: recipeIngredients } = await getRecipeWithIngredients(id, activeCompany.id);
           if (recipe) {
             // Definir tipo do produto gerado
             setProductTypeForForm(recipe.code === 'SUB' ? 'subreceita' : 'receita');
@@ -223,6 +235,7 @@ export default function RecipeForm() {
   
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
+    console.log(`handleInputChange - Name: ${name}, Value: ${value}`); // <-- LOG DE DEPURAÇÃO
     // Apenas atualiza o estado com o valor string do input
     // A conversão/validação será feita no handleSave
     setRecipeForm(prev => ({ 
@@ -414,7 +427,12 @@ export default function RecipeForm() {
     }
 
     try {
-      const nameExists = await checkRecipeNameExists(nameToCheck, id); // Passa o ID atual, se houver (edição)
+      if (authLoading || !activeCompany?.id) {
+        toast.error("Empresa ativa não carregada. Tente novamente mais tarde.");
+        setLoading(false);
+        return;
+      }
+      const nameExists = await checkRecipeNameExists(nameToCheck, activeCompany.id, id);
       if (nameExists) {
         toast.error(`Já existe uma receita com o nome "${nameToCheck}". Escolha outro nome.`);
         setLoading(false);
@@ -513,73 +531,17 @@ export default function RecipeForm() {
           recipeData,
           ingredientsToAdd,
           ingredientsToUpdate,
-          ingredientsToDelete
+          ingredientsToDelete,
+          activeCompany.id
         );
       } else {
         // Create new recipe with all ingredients
         const formattedIngredients = mapIngredientsForBackend(ingredients);
-        result = await createRecipe(recipeData, formattedIngredients);
+        result = await createRecipe(recipeData, formattedIngredients, activeCompany.id);
       }
       
-      if (result && result.id) {
-        // --- INTEGRAÇÃO PRODUTO/RECEITA ---
-        try {
-          const { createProduct, updateProduct, findProductByNameAndType } = await import('@/services/productService');
-          // Definir tipo do produto
-          const productType = recipeForm.isSubProduct ? 'subreceita' as import('@/services/productService').ProductType : 'receita' as import('@/services/productService').ProductType;
-          const finalUnit = recipeForm.isSubProduct ? 'KG' : recipeForm.finalUnit;
-          // Cálculo de custo e peso
-          const safeCostPerKg = costPerKg ?? 0;
-          const safeCostPerUnit = costPerUnit ?? 0;
-          const safeYieldKg = yieldKgNum ?? 0; // Usar o número validado aqui também
-          const safeYieldUnits = recipeForm.yieldUnits ?? 0;
-          let calculatedKgWeight = null;
-          if (safeYieldKg > 0 && safeYieldUnits > 0) {
-            calculatedKgWeight = safeYieldKg / safeYieldUnits;
-          }
-          // Montar payload
-          let productPayload = {
-            name: recipeForm.name,
-            product_type: productType, // Corrigido para o campo correto
-            group_id: recipeForm.group_id,
-            subgroup_id: recipeForm.subgroup_id,
-            recipe_id: result.id,
-            unit: finalUnit,
-            cost: finalUnit === 'KG' ? safeCostPerKg : safeCostPerUnit,
-            unit_weight: finalUnit === 'UN' ? calculatedKgWeight : null,
-            kg_weight: null, 
-            unit_price: null, // Pode ser calculado depois
-            min_stock: 0,
-            current_stock: null,
-            supplier: null,
-            sku: null,
-            code: null,
-            // Definir campos de dias da semana como false por padrão
-            all_days: false,
-            monday: false,
-            tuesday: false,
-            wednesday: false,
-            thursday: false,
-            friday: false,
-            saturday: false,
-            sunday: false
-          };
-
-          // Buscar produto existente
-          const existingProduct = await findProductByNameAndType(productPayload.name, productType); // product_type sempre usado para busca
-          if (existingProduct) {
-            await updateProduct(existingProduct.id, productPayload);
-            toast.info(`Produto '${productPayload.name}' atualizado.`);
-          } else {
-            await createProduct(productPayload);
-            toast.success(`Produto '${productPayload.name}' criado.`);
-          }
-        } catch (productError) {
-          console.error("Erro ao processar produto associado:", productError);
-          toast.error("Receita salva, mas houve erro ao criar/atualizar produto associado.");
-        }
-        // --- FIM INTEGRAÇÃO PRODUTO/RECEITA ---
-        toast.success(isEditing ? "Receita atualizada com sucesso!" : "Receita criada com sucesso!");
+      if (result) {
+        toast.success("Receita salva com sucesso!");
         navigate('/recipes');
       }
     } catch (error) {
@@ -590,6 +552,7 @@ export default function RecipeForm() {
     }
   };
 
+  console.log("Renderizando RecipeForm com estado:", recipeForm); // <-- LOG DE DEPURAÇÃO
   return (
     <div className="animate-fade-in">
       <div className="flex items-center mb-6">
@@ -667,12 +630,15 @@ export default function RecipeForm() {
                     required
                     className={`form-input ${fieldErrors.name ? 'border-red-500 ring-red-500' : ''}`}
                     suggestions={existingRecipes.map(recipe => recipe.name)}
-                    onSelect={(value) => {
-                      setRecipeForm(prev => ({
-                        ...prev,
-                        name: value
-                      }));
-                    }}
+                    //onSelect={(value) => {
+                    //  // Only update if the value is different from current
+                    //  if (value !== recipeForm.name) {
+                    //    setRecipeForm(prev => ({
+                    //      ...prev,
+                    //      name: value
+                    //    }));
+                    //  }
+                    //}}
                   />
                 </div>
                 

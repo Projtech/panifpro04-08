@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { Group, createGroup, updateGroup } from '@/services/groupService';
 import { toast } from "sonner";
+import { useAuth } from '@/contexts/AuthContext';
 
 interface GroupForm {
   id: string;
@@ -32,25 +33,29 @@ export const useGroupForm = (onUpdate: () => void) => {
     });
   };
 
+  const { activeCompany, loading } = useAuth();
+
   const handleSaveGroup = async (): Promise<boolean> => {
     if (!groupForm.name.trim()) {
       toast.error("O nome do grupo é obrigatório");
       return false;
     }
-
+    if (loading || !activeCompany?.id) {
+      toast.error("Empresa ativa não carregada. Tente novamente mais tarde.");
+      return false;
+    }
     try {
       if (groupForm.id) {
         await updateGroup(groupForm.id, {
           name: groupForm.name,
           description: groupForm.description || null
-        });
+        }, activeCompany.id);
       } else {
         await createGroup({
           name: groupForm.name,
           description: groupForm.description || null
-        });
+        }, activeCompany.id);
       }
-      
       onUpdate();
       return true;
     } catch (error) {

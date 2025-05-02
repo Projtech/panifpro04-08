@@ -58,7 +58,13 @@ export default function ProductionConfirmation() {
   useEffect(() => {
     const loadPendingOrders = async () => {
       setLoading(true);
-      const orders = await getPendingProductionOrders();
+      if (authLoading || !activeCompany?.id) {
+        toast({ title: 'Empresa ativa não carregada.', variant: 'destructive' });
+        setPendingOrders([]);
+        setLoading(false);
+        return;
+      }
+      const orders = await getPendingProductionOrders(activeCompany.id);
       setPendingOrders(orders);
       setLoading(false);
     };
@@ -71,7 +77,12 @@ export default function ProductionConfirmation() {
       if (!id) return;
       
       setLoading(true);
-      const order = await getProductionOrder(id);
+      if (authLoading || !activeCompany?.id) {
+        toast({ title: 'Empresa ativa não carregada.', variant: 'destructive' });
+        setLoading(false);
+        return;
+      }
+      const order = await getProductionOrder(id, activeCompany.id);
       
       if (order) {
         setSelectedOrderId(order.id);

@@ -2,6 +2,8 @@
 import { useState, useEffect } from "react";
 import { getProductInventory } from "@/services/inventoryService";
 import { getRecipes } from "@/services/recipeService";
+import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
 import { getProductionOrders } from "@/services/productionOrderService";
 
 interface DashboardStats {
@@ -20,6 +22,7 @@ interface ActivityItem {
 }
 
 export function useDashboardData() {
+  const { activeCompany, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(true);
   const [dashboardStats, setDashboardStats] = useState<DashboardStats>({
     totalProducts: 0,
@@ -35,19 +38,24 @@ export function useDashboardData() {
 
   useEffect(() => {
     const fetchDashboardData = async () => {
+      if (authLoading || !activeCompany?.id) {
+        toast.error('Empresa ativa não carregada. Tente novamente mais tarde.');
+        setLoading(false);
+        return;
+      }
       setLoading(true);
       try {
         // Get inventory data
-        const inventory = await getProductInventory();
+        const inventory = await getProductInventory(activeCompany.id);
         
         // Count low stock items
         const lowStockItems = inventory.filter(item => item.current_stock < item.min_stock);
         
         // Get recipes
-        const recipes = await getRecipes();
+        const recipes = await getRecipes(activeCompany.id);
         
         // Get production orders
-        const productionOrders = await getProductionOrders();
+        const productionOrders = await getProductionOrders(activeCompany.id);
         
         // Count pending and completed orders
         const pendingOrders = productionOrders.filter(order => order.status === 'pending');

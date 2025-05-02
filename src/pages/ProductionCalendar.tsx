@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -56,8 +57,13 @@ const ProductionCalendar = () => {
   // Hook de navegação
   const navigate = useNavigate();
   
+  // Hook para obter empresa ativa
+  type AuthContextType = { activeCompany?: { id?: string }, loading?: boolean };
+  const { activeCompany, loading: authLoading } = useAuth() as AuthContextType;
+  const companyId = activeCompany?.id;
+
   // Hook para gerenciar listas de produção
-  const { lists, loading, error, reloadLists } = useProductionLists();
+  const { lists, loading: listsLoading, error: listsError, reloadLists } = useProductionLists(companyId);
 
   // Novo estado para loading do botão de atualizar
   const [isUpdatingDaily, setIsUpdatingDaily] = useState<boolean>(false);
@@ -73,19 +79,25 @@ const ProductionCalendar = () => {
   
   // Handler do botão de atualizar listas diárias
   const handleUpdateDailyLists = async () => {
+    if (!companyId) {
+        toast.warning("Nenhuma empresa ativa selecionada.");
+        return;
+    }
     setIsUpdatingDaily(true);
     try {
       const { generateDailyLists } = await import("@/services/productionListService");
-      // Chamar sem user_id
-      const result = await generateDailyLists();
+      // Passar companyId para generateDailyLists
+      const result = await generateDailyLists(companyId);
       if (result.success) {
         toast.success("Listas diárias atualizadas com sucesso!");
         setLastUpdated(new Date());
         await reloadLists();
       } else {
-        toast.error("Erro ao atualizar listas diárias");
+        console.error("Falha ao gerar listas diárias:", result.error);
+        // A função generateDailyLists já mostra um toast de erro no serviço
       }
     } catch (error) {
+      console.error("Erro capturado ao atualizar listas:", error); // Log mais detalhado
       toast.error("Erro ao atualizar listas diárias");
     } finally {
       setIsUpdatingDaily(false);
@@ -99,6 +111,10 @@ const ProductionCalendar = () => {
   
   // Função para abrir o modal de nova lista personalizada
   const handleOpenNewListForm = () => {
+    if (!companyId) {
+      toast.warning("Selecione uma empresa para criar uma lista.");
+      return;
+    }
     setEditingList(null);
     setEditingListItems([]);
     setIsFormModalOpen(true);
@@ -113,20 +129,24 @@ const ProductionCalendar = () => {
   
   // Função para salvar uma lista (criar ou atualizar)
   const handleSaveList = async (
-    listData: Omit<ProductionList, 'id' | 'created_at' | 'updated_at' | 'user_id'>,
-    itemsData: Omit<ProductionListItem, 'id' | 'list_id' | 'created_at' | 'updated_at'>[]
+    listData: Omit<ProductionList, 'id' | 'created_at' | 'updated_at' | 'user_id' | 'company_id'>,
+    itemsData: Omit<ProductionListItem, 'id' | 'list_id' | 'created_at' | 'updated_at' | 'company_id'>[]
   ) => {
+    if (!companyId) {
+      toast.error("Nenhuma empresa selecionada para salvar a lista.");
+      return;
+    }
     setIsSavingList(true);
     
     try {
       if (editingList) {
         // Modo de edição
-        await updateProductionList(editingList.id, listData, itemsData);
+        await updateProductionList(editingList.id, listData, companyId, itemsData);
         toast.success("Lista de produção atualizada com sucesso");
       } else {
         // Modo de criação
         await createProductionList(
-          { ...listData, type: 'custom' },
+          { ...listData, type: 'custom', companyId: companyId },
           itemsData
         );
         toast.success("Lista de produção criada com sucesso");
@@ -145,12 +165,16 @@ const ProductionCalendar = () => {
   
   // Função para editar uma lista existente
   const handleEditList = async (list: ProductionListWithItems) => {
+    if (!companyId) {
+      toast.error("Nenhuma empresa selecionada para editar a lista.");
+      return;
+    }
     setIsLoadingItems(true);
     setEditingList(list);
     setEditingListItems([]);
     
     try {
-      const items = await getProductionListItems(list.id);
+      const items = await getProductionListItems(list.id, companyId);
       setEditingListItems(items);
       setIsFormModalOpen(true);
     } catch (error) {
@@ -164,9 +188,13 @@ const ProductionCalendar = () => {
   
   // Função para excluir uma lista
   const handleDeleteList = async (list: ProductionList) => {
+    if (!companyId) {
+      toast.error("Nenhuma empresa selecionada para excluir a lista.");
+      return;
+    }
     try {
-      await deleteProductionList(list.id);
-      reloadLists();
+      await deleteProductionList(list.id, companyId);
+      await reloadLists(); // Aguarde o reload antes de seguir
       toast.success("Lista excluída com sucesso");
     } catch (error) {
       console.error("Erro ao excluir lista:", error);
@@ -176,9 +204,14 @@ const ProductionCalendar = () => {
   
   // Função para gerar pedido de produção a partir de uma lista
   const handleGenerateOrder = async (list: ProductionListWithItems) => {
+  if (!companyId) return;
+    if (!companyId) {
+      toast.error("Nenhuma empresa selecionada para gerar o pedido.");
+      return;
+    }
     try {
       // Buscar itens atualizados do banco
-      const items = await getProductionListItemsWithDetails(list.id);
+      const items = await getProductionListItemsWithDetails(list.id, companyId);
       if (!items || items.length === 0) {
         toast.warning("Esta lista não possui itens para gerar um pedido.");
         return;
@@ -217,8 +250,10 @@ const ProductionCalendar = () => {
   
   // Função para exportar lista para PDF
   const handleExportPDF = async (list: ProductionListWithItems) => {
+  if (!companyId) return;
+    if (!companyId) { return; }
     try {
-      await exportToPDF(list.id, list.name);
+      await exportToPDF(list.id, list.name, companyId);
     } catch (error) {
       console.error("Erro ao exportar PDF:", error);
       // O toast de erro já está sendo tratado na função exportToPDF
@@ -227,8 +262,10 @@ const ProductionCalendar = () => {
 
   // Função para exportar lista para Excel
   const handleExportExcel = async (list: ProductionListWithItems) => {
+  if (!companyId) return;
+    if (!companyId) { return; }
     try {
-      await exportToExcel(list.id, list.name);
+      await exportToExcel(list.id, list.name, companyId);
     } catch (error) {
       console.error("Erro ao exportar Excel:", error);
       // O toast de erro já está sendo tratado na função exportToExcel
@@ -238,7 +275,32 @@ const ProductionCalendar = () => {
   // Remover atualização automática de lastUpdated
 // O contador será atualizado apenas no sucesso do botão de atualizar listas diárias.
 
+  // Renderização condicional para loading, sem empresa ou erro
+if (authLoading || listsLoading) {
   return (
+    <div className="flex items-center justify-center h-40">
+      <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <span className="ml-2 text-muted-foreground">Carregando dados...</span>
+    </div>
+  );
+}
+if (!companyId) {
+  return (
+    <div className="p-4 text-center text-red-600 border border-red-200 bg-red-50 rounded-md">
+      Nenhuma empresa ativa selecionada. Por favor, selecione uma empresa no menu superior ou através da gestão de acesso.
+    </div>
+  );
+}
+if (listsError) {
+  return (
+    <div className="p-4 text-center text-red-600 border border-red-200 bg-red-50 rounded-md">
+      Erro ao carregar listas de produção: {listsError.message}
+      <Button onClick={reloadLists} variant="outline" size="sm" className="ml-4">Tentar Novamente</Button>
+    </div>
+  );
+}
+
+return (
     <div className="p-4 space-y-4">
       <div className="flex items-center gap-2 mb-2">
         <Button variant="outline" size="icon" onClick={() => navigate(-1)}>
@@ -266,8 +328,8 @@ const ProductionCalendar = () => {
             const getDayIndex = (name: string) => order.findIndex(d => name.includes(d));
             return getDayIndex(a.name) - getDayIndex(b.name);
           })}
-          isLoading={loading || isUpdatingDaily}
-          error={error}
+          isLoading={listsLoading || isUpdatingDaily}
+          error={listsError}
           onExportPDF={handleExportPDF}
           onExportExcel={handleExportExcel}
           onGenerateOrder={handleGenerateOrder}
@@ -276,8 +338,10 @@ const ProductionCalendar = () => {
         <h2 className="font-semibold">Listas Personalizadas</h2>
         <ProductionListTable
           lists={lists.filter(l => l.type === 'custom')}
-          isLoading={loading}
-          error={error}
+          isLoading={listsLoading}
+          error={listsError}
+          onEditList={handleEditList}
+          onDeleteList={handleDeleteList}
           onExportPDF={handleExportPDF}
           onExportExcel={handleExportExcel}
           onGenerateOrder={handleGenerateOrder}
@@ -299,6 +363,7 @@ const ProductionCalendar = () => {
             onSave={handleSaveList}
             onCancel={handleCloseFormModal}
             isLoading={isSavingList}
+            companyId={companyId}
           />
         </DialogContent>
       </Dialog>

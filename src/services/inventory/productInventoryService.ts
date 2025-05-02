@@ -3,7 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { ProductInventory } from "./inventoryTypes";
 
-export async function getProductInventory(): Promise<ProductInventory[]> {
+export async function getProductInventory(companyId: string): Promise<ProductInventory[]> {
+  if (!companyId) throw new Error('[getProductInventory] companyId é obrigatório');
   console.log("[INVENTORY] Fetching product inventory...");
   try {
     // This gets products with their current_stock values and recipe information
@@ -13,6 +14,7 @@ export async function getProductInventory(): Promise<ProductInventory[]> {
         *,
         recipe:recipes(name, code, yield_kg, yield_units, cost_per_kg, cost_per_unit)
       `)
+      .eq('company_id', companyId)
       .order('name');
     
     if (error) throw error;

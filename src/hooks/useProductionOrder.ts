@@ -10,6 +10,7 @@ import {
   ProductionOrderItem 
 } from "@/services/productionOrderService";
 import { getAllRecipeIngredients, getRecipes, Recipe } from "@/services/recipeService";
+import { useAuth } from '@/contexts/AuthContext';
 import { MaterialItem } from "@/components/ProductionOrder/MaterialsCalculator";
 
 interface UseProductionOrderProps {
@@ -25,6 +26,7 @@ interface UseProductionOrderProps {
 }
 
 export default function useProductionOrder({ id, calendarItems, calendarDate }: UseProductionOrderProps = {}) {
+  const { activeCompany, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(true);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   
@@ -43,8 +45,17 @@ export default function useProductionOrder({ id, calendarItems, calendarDate }: 
   
   useEffect(() => {
     const loadRecipes = async () => {
+      if (authLoading || !activeCompany?.id) {
+        toast({
+          title: 'Empresa ativa não carregada',
+          description: 'Tente novamente mais tarde.',
+          variant: 'destructive',
+        });
+        setLoading(false);
+        return;
+      }
       setLoading(true);
-      const recipesData = await getRecipes();
+      const recipesData = await getRecipes(activeCompany.id);
       setRecipes(recipesData);
       
       // If we have an ID, load the production order

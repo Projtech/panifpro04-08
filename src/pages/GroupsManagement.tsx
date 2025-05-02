@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, Plus } from "lucide-react";
 import HierarchicalGroupView from "@/components/HierarchicalGroupView";
 import { Group, Subgroup, getGroups, getSubgroups } from "@/services/groupService";
+import { useAuth } from '@/contexts/AuthContext';
 import { useGroupManagement } from "@/hooks/useGroupManagement";
 import GroupDialog from "@/components/Group/GroupDialog";
 import SubgroupDialog from "@/components/Group/SubgroupDialog";
@@ -14,16 +15,19 @@ const GroupsManagement = () => {
   const [loading, setLoading] = useState(true);
   const [groups, setGroups] = useState<Group[]>([]);
   const [subgroups, setSubgroups] = useState<Subgroup[]>([]);
+
+  const { activeCompany, loading: authLoading } = useAuth();
   
   const navigate = useNavigate();
   
   const loadData = async () => {
+    if (authLoading || !activeCompany?.id) return;
     setLoading(true);
     try {
-      const groupsData = await getGroups();
+      const groupsData = await getGroups(activeCompany.id);
       setGroups(groupsData);
       
-      const subgroupsData = await getSubgroups();
+      const subgroupsData = await getSubgroups(activeCompany.id);
       setSubgroups(subgroupsData);
     } catch (error) {
       console.error("Erro ao carregar dados:", error);
@@ -34,7 +38,8 @@ const GroupsManagement = () => {
   
   useEffect(() => {
     loadData();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading, activeCompany?.id]);
   
   const {
     showGroupDialog,
@@ -51,8 +56,10 @@ const GroupsManagement = () => {
     handleDeleteSubgroup,
     handleSaveSubgroup,
     handleConfirmDelete,
-    setShowGroupDialog,
-    setShowSubgroupDialog,
+    openGroupDialog,
+    closeGroupDialog,
+    openSubgroupDialog,
+    closeSubgroupDialog,
     setShowDeleteDialog,
     setGroupForm,
     setSubgroupForm,
@@ -105,7 +112,7 @@ const GroupsManagement = () => {
       
       <GroupDialog
         open={showGroupDialog}
-        onOpenChange={setShowGroupDialog}
+        onOpenChange={(open) => open ? openGroupDialog() : closeGroupDialog()}
         groupForm={groupForm}
         setGroupForm={setGroupForm}
         onSave={handleSaveGroupWrapper}
@@ -114,7 +121,7 @@ const GroupsManagement = () => {
       
       <SubgroupDialog
         open={showSubgroupDialog}
-        onOpenChange={setShowSubgroupDialog}
+        onOpenChange={(open) => open ? openSubgroupDialog() : closeSubgroupDialog()}
         subgroupForm={subgroupForm}
         setSubgroupForm={setSubgroupForm}
         onSave={handleSaveSubgroupWrapper}

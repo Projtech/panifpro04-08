@@ -29,17 +29,17 @@ interface GroupedItem {
  * @param listId ID da lista de produção
  * @returns Um array de itens agrupados e ordenados
  */
-async function getProcessedListItems(listId: string): Promise<GroupedItem[]> {
+async function getProcessedListItems(listId: string, companyId: string): Promise<GroupedItem[]> {
   // 1. Buscar os itens da lista com detalhes
-  const items = await getProductionListItemsWithDetails(listId);
+  const items = await getProductionListItemsWithDetails(listId, companyId);
   
   if (!items || items.length === 0) {
     throw new Error('Nenhum item encontrado na lista');
   }
   
   // 2. Buscar grupos e subgrupos para mapear IDs para nomes
-  const groups = await getGroups();
-  const subgroups = await getSubgroups();
+  const groups = await getGroups(companyId);
+  const subgroups = await getSubgroups(companyId);
   
   // 3. Mapear IDs para nomes e preparar dados agrupados
   const groupedItems: GroupedItem[] = items.map(item => {
@@ -126,16 +126,21 @@ function getTableBody(groupedItems: GroupedItem[]) {
  * Exporta uma lista de produção para o formato PDF
  * @param listId ID da lista de produção a ser exportada
  * @param listName Nome da lista de produção para ser usado no título e nome do arquivo
+ * @param companyId ID da empresa para filtrar os dados
  */
-export async function exportToPDF(listId: string, listName: string): Promise<void> {
+export async function exportToPDF(listId: string, listName: string, companyId: string): Promise<void> {
+  if (!companyId || typeof companyId !== "string") {
+    throw new Error('[exportToPDF] companyId é obrigatório');
+  }
+  
   let loadingToast: any = null;
   
   try {
     // Feedback inicial
     loadingToast = toast.loading('Gerando PDF...');
     
-    // Buscar e processar os dados da lista
-    const groupedItems = await getProcessedListItems(listId);
+    // Buscar e processar os dados da lista - PASSANDO O companyId
+    const groupedItems = await getProcessedListItems(listId, companyId);
     
     // 5. Gerar PDF
     const doc = new jsPDF();
@@ -230,16 +235,21 @@ export async function exportToPDF(listId: string, listName: string): Promise<voi
  * Exporta uma lista de produção para o formato Excel
  * @param listId ID da lista de produção a ser exportada
  * @param listName Nome da lista de produção para ser usado no título e nome do arquivo
+ * @param companyId ID da empresa para filtrar os dados
  */
-export async function exportToExcel(listId: string, listName: string): Promise<void> {
+export async function exportToExcel(listId: string, listName: string, companyId: string): Promise<void> {
+  if (!companyId || typeof companyId !== "string") {
+    throw new Error('[exportToExcel] companyId é obrigatório');
+  }
+  
   let loadingToast: any = null;
   
   try {
     // Feedback inicial
-    loadingToast = toast.loading('Gerando planilha Excel...');
+    loadingToast = toast.loading('Gerando Excel...');
     
-    // Buscar e processar os dados da lista
-    const groupedItems = await getProcessedListItems(listId);
+    // Buscar e processar os dados da lista - PASSANDO O companyId
+    const groupedItems = await getProcessedListItems(listId, companyId);
     
     // Criar um novo workbook do Excel
     const workbook = new ExcelJS.Workbook();

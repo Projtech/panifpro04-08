@@ -36,11 +36,14 @@ import {
 } from "@/services/productionOrderService";
 import { toast } from "sonner";
 
+import { useAuth } from '@/contexts/AuthContext';
+
 export default function ProductionOrders() {
   const [orders, setOrders] = useState<ProductionOrderWithItems[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<OrderStatus | null>(null);
   const [loading, setLoading] = useState(true);
+  const { activeCompany, loading: authLoading } = useAuth();
   
   const navigate = useNavigate();
   
@@ -49,7 +52,13 @@ export default function ProductionOrders() {
     const loadData = async () => {
       setLoading(true);
       try {
-        const ordersData = await getProductionOrders();
+        if (authLoading || !activeCompany?.id) {
+          toast.error('Empresa ativa não carregada. Tente novamente mais tarde.');
+          setOrders([]);
+          setLoading(false);
+          return;
+        }
+        const ordersData = await getProductionOrders(activeCompany.id);
         setOrders(ordersData);
       } catch (error) {
         console.error("Error fetching production orders:", error);
@@ -60,7 +69,7 @@ export default function ProductionOrders() {
     };
     
     loadData();
-  }, []);
+  }, [authLoading, activeCompany]);
   
   const filteredOrders = orders.filter(order => {
     const matchesSearch = 

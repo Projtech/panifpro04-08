@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Group, Subgroup, deleteGroup, deleteSubgroup } from '@/services/groupService';
 import { toast } from "sonner";
+import { useAuth } from '@/contexts/AuthContext';
 import { useGroupForm } from './useGroupForm';
 import { useSubgroupForm } from './useSubgroupForm';
 import { useDialogControl } from './useDialogControl';
@@ -80,22 +81,27 @@ export const useGroupManagement = (
     openDeleteDialog('subgroup', id);
   };
 
+  const { activeCompany, loading } = useAuth();
+
   const handleConfirmDelete = async (): Promise<void> => {
+    if (loading || !activeCompany?.id) {
+      toast.error("Empresa ativa não carregada. Tente novamente mais tarde.");
+      return;
+    }
     try {
       let success = false;
-      
       if (deleteType === 'group') {
-        success = await deleteGroup(deleteId);
+        success = await deleteGroup(deleteId, activeCompany.id);
       } else {
-        success = await deleteSubgroup(deleteId);
+        success = await deleteSubgroup(deleteId, activeCompany.id);
       }
-      
       if (success) {
         onUpdate();
         closeDeleteDialog();
       }
     } catch (error) {
       console.error("Erro ao excluir:", error);
+      toast.error("Erro ao excluir. Tente novamente.");
     }
   };
 
@@ -117,8 +123,10 @@ export const useGroupManagement = (
     handleSaveSubgroup,
     handleConfirmDelete,
     setSelectedGroup,
-    setShowGroupDialog: closeGroupDialog,
-    setShowSubgroupDialog: closeSubgroupDialog,
+    openGroupDialog,
+    closeGroupDialog,
+    openSubgroupDialog,
+    closeSubgroupDialog,
     setShowDeleteDialog: closeDeleteDialog,
     setGroupForm,
     setSubgroupForm

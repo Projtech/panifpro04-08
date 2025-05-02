@@ -46,6 +46,7 @@ import { toast } from "sonner";
 import { getRecipes, Recipe, deleteRecipe, updateAllRecipesCosts } from "@/services/recipeService";
 import { generateRecipePdf, PdfType } from "@/services/pdfService";
 import { getGroups, getSubgroups, Group, Subgroup } from "@/services/groupService";
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function Recipes() {
   const [loading, setLoading] = useState(true);
@@ -65,9 +66,12 @@ export default function Recipes() {
   
   const navigate = useNavigate();
 
+  const { activeCompany, loading: authLoading } = useAuth();
+
   const fetchGroups = async () => {
+    if (authLoading || !activeCompany?.id) return;
     try {
-      const groupsData = await getGroups();
+      const groupsData = await getGroups(activeCompany.id);
       setGroups(groupsData);
     } catch (error) {
       console.error("Erro ao carregar grupos:", error);
@@ -76,8 +80,9 @@ export default function Recipes() {
   };
   
   const fetchSubgroups = async () => {
+    if (authLoading || !activeCompany?.id) return;
     try {
-      const subgroupsData = await getSubgroups();
+      const subgroupsData = await getSubgroups(activeCompany.id);
       setSubgroups(subgroupsData);
     } catch (error) {
       console.error("Erro ao carregar subgrupos:", error);
@@ -86,12 +91,17 @@ export default function Recipes() {
   };
 
   const fetchRecipes = async () => {
+    if (authLoading || !activeCompany?.id) {
+      toast.error("Empresa ativa não carregada. Tente novamente mais tarde.");
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
-      const data = await getRecipes();
+      const data = await getRecipes(activeCompany.id);
       setRecipes(data);
     } catch (error) {
-      console.error("Error fetching recipes:", error);
+      console.error("Error fetching receitas:", error);
       toast.error("Erro ao carregar receitas");
     } finally {
       setLoading(false);
@@ -151,9 +161,13 @@ export default function Recipes() {
   };
   
   const confirmDelete = async () => {
+    if (authLoading || !activeCompany?.id) {
+      toast.error("Empresa ativa não carregada. Tente novamente mais tarde.");
+      return;
+    }
     if (recipeToDelete) {
       setLoading(true);
-      const success = await deleteRecipe(recipeToDelete.id);
+      const success = await deleteRecipe(recipeToDelete.id, activeCompany.id);
       
       if (success) {
         setRecipes(recipes.filter(r => r.id !== recipeToDelete.id));
@@ -172,10 +186,13 @@ export default function Recipes() {
 
   const generatePdf = async (type: PdfType) => {
     if (!selectedRecipe) return;
-    
+    if (authLoading || !activeCompany?.id) {
+      toast.error('Empresa ativa não carregada. Tente novamente mais tarde.');
+      return;
+    }
     try {
       setLoading(true);
-      await generateRecipePdf(selectedRecipe.id, type);
+      await generateRecipePdf(activeCompany.id, selectedRecipe.id, type);
       toast.success("PDF da receita gerado com sucesso!");
       setPdfOptionsDialogOpen(false);
     } catch (error) {
@@ -186,10 +203,16 @@ export default function Recipes() {
     }
   };
 
+
   const handleUpdateAllCosts = async () => {
     try {
       setUpdatingCosts(true);
-      await updateAllRecipesCosts();
+      if (authLoading || !activeCompany?.id) {
+        toast.error("Empresa ativa não carregada. Tente novamente mais tarde.");
+        setUpdatingCosts(false);
+        return;
+      }
+      await updateAllRecipesCosts(activeCompany.id);
       // Refresh the recipes list to show updated costs
       await fetchRecipes();
       toast.success("Custos de todas as receitas atualizados com sucesso");

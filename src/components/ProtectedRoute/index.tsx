@@ -11,26 +11,45 @@ export function ProtectedRoute({ children, adminOnly = false }: ProtectedRoutePr
   const { isAuthenticated, loading, activeCompany, isAdmin, needsPasswordChange, setNeedsPasswordChange } = useAuth();
   const location = useLocation();
 
+  // Log principal de diagnóstico
+  console.log(
+    `[ProtectedRoute] Path: ${location.pathname}`,
+    {
+      loading,
+      isAuthenticated,
+      needsPasswordChange,
+      activeCompanyId: activeCompany?.id,
+      userRole: activeCompany?.role,
+      isAdmin,
+      adminOnly
+    }
+  );
+
   if (loading) {
-    // Exibir indicador de carregamento enquanto verifica autenticação
+    console.log('[ProtectedRoute] State: Loading');
     return <div className="flex items-center justify-center min-h-screen">Carregando...</div>;
   }
 
   if (!isAuthenticated) {
-    // Redirecionar para login se não estiver autenticado
+    console.log('[ProtectedRoute] State: Not Authenticated, redirecting to /login');
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
   if (needsPasswordChange) {
-    // Se o usuário precisa trocar a senha, mostrar tela de troca de senha
+    console.log('[ProtectedRoute] State: Needs Password Change, showing ForcePasswordChange');
     return <ForcePasswordChange onPasswordChanged={() => setNeedsPasswordChange(false)} />;
   }
 
+  if (!activeCompany) {
+    console.log('ProtectedRoute: User authenticated but no active company yet, redirecting to select-company');
+    return <Navigate to="/select-company" state={{ from: location }} replace />;
+  }
 
   if (adminOnly && !isAdmin) {
-    // Redirecionar para dashboard se não for admin e a rota for admin-only
+    console.log('[ProtectedRoute] State: AdminOnly route and user is NOT admin, redirecting to /dashboard');
     return <Navigate to="/dashboard" state={{ from: location }} replace />;
   }
 
+  console.log('[ProtectedRoute] State: Access Granted, rendering children');
   return <>{children}</>;
 }
