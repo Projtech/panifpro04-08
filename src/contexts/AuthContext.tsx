@@ -1,222 +1,283 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import React, {
+  createContext,
+  useState,
+  useEffect,
+  useContext,
+  useCallback,
+  useMemo,
+} from 'react';
 import { Session, User } from '@supabase/supabase-js';
-import { toast } from 'sonner';
-import { queryClient } from '@/lib/react-query';
+import { supabase } from '@/integrations/supabase/client'; // Ajuste o caminho se necessário
+import { useNavigate } from 'react-router-dom'; // Importar useNavigate
+import { queryClient } from '@/lib/react-query'; // Importar queryClient
 
-interface Company {
-  id: string;
-  name: string;
+// Interface para os dados da empresa ativa
+// Redefinido para incluir id e name explicitamente, correspondendo aos dados da query
+interface ActiveCompanyData {
+  id: string;    // Vem de company.id
+  name: string;  // Vem de company.name
+  role: string;  // Vem de companyUserData.role
+  user_id: string; // Associado manualmente ao usuário atual
 }
 
-interface CompanyUserRole {
-  role: 'admin' | 'user';
-}
-
-interface CombinedCompanyData extends Company, CompanyUserRole {}
-
+// Interface para o tipo do contexto
 interface AuthContextType {
-  isAuthenticated: boolean;
   user: User | null;
+  session: Session | null;
+  isAuthenticated: boolean;
   loading: boolean;
-  activeCompany: CombinedCompanyData | null;
-  setActiveCompany: (company: CombinedCompanyData | null) => void;
-  isAdmin: boolean;
+  activeCompany: ActiveCompanyData | null; // Empresa ativa com role
+  setActiveCompany: (companyData: ActiveCompanyData | null) => void;
   signOut: () => Promise<void>;
-  needsPasswordChange: boolean;
-  setNeedsPasswordChange: (value: boolean) => void;
-  checkPasswordChangeRequirement: () => Promise<boolean>;
+  authError: string | null; // Estado para armazenar erros de autenticação/busca
+  isAdmin: boolean; // Adicionado para lógica de admin
+  needsPasswordChange: boolean; // Adicionado
+  // A função checkPasswordChangeRequirement foi removida do valor do contexto pois é usada internamente
 }
 
+// Cria o contexto com um valor padrão inicial
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [activeCompany, setActiveCompany] = useState<CombinedCompanyData | null>(null);
-  const [needsPasswordChange, _setNeedsPasswordChange] = useState(false);
-
-  const setNeedsPasswordChange = (value: boolean) => {
-    _setNeedsPasswordChange(prev => {
-      if (prev !== value) return value;
-      return prev;
-    });
-  }
-
-  const checkPasswordChangeRequirement = async () => {
-    if (!user) return false;
-
-    try {
-      console.log('checkPasswordChangeRequirement chamado para user', user?.id);
-      const { data, error, status } = await supabase
-        .from('profiles')
-        .select('force_password_change')
-        .eq('id', user.id)
-        .maybeSingle();
-
-      if (status === 406 || (error && error.code === 'PGRST116')) {
-        console.warn('Perfil não encontrado ou acesso negado para verificar troca de senha. Assumindo false.', error);
-        setNeedsPasswordChange(false);
-        return false;
-      }
-      
-      if (error) throw error;
-
-      const needsChange = data?.force_password_change || false;
-      setNeedsPasswordChange(needsChange);
-      return needsChange;
-    } catch (error) {
-      console.error('Erro ao verificar requisito de troca de senha:', error);
-      setNeedsPasswordChange(false); 
-      return false;
-    }
-  };
-
-  useEffect(() => {
-    console.log('[AuthContext:Refactored] Configurando onAuthStateChange...');
-    
-    // localStorage.removeItem('activeCompany'); // Comentado: Limpeza desnecessária no início
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        console.log(`[AuthContext:Refactored] onAuthStateChange Event: ${event}, Session:`, session);
-        
-        // Primeiro atualizar o loading para true apenas se não estivermos no evento PASSWORD_RECOVERY
-        if (event !== 'PASSWORD_RECOVERY') {
-          setLoading(true);
-        }
-
-        let finalCompanyData: CombinedCompanyData | null = null; 
-
-        if (event === 'PASSWORD_RECOVERY') {
-            console.log('[AuthContext:Refactored] Evento PASSWORD_RECOVERY detectado.');
-            setSession(session);
-            setUser(session?.user ?? null);
-            setActiveCompany(null); 
-            setNeedsPasswordChange(true);
-            setLoading(false); 
-            return;
-        }
-
-        if (session?.user) {
-            console.log(`[AuthContext:Refactored] Usuário ${session.user.id} logado ou sessão inicial válida.`);
-            setSession(session);
-            setUser(session.user);
-
-            console.log(`[AuthContext:Refactored] Buscando empresa+role para user ${session.user.id}`);
-            try {
-                console.log('[AuthContext:Debug] ANTES da query company_users');
-                const { data: companyUserData, error: companyError } = await supabase
-                    .from('company_users')
-                    .select('role, company:company_id(id, name)') 
-                    .eq('user_id', session.user.id)
-                    .limit(1)
-                    .maybeSingle(); 
-                console.log('[AuthContext:Debug] DEPOIS da query company_users');
-                console.log('[AuthContext:Debug] companyUserData:', companyUserData);
-                console.log('[AuthContext:Debug] companyError:', companyError);
-
-                console.log('[AuthContext:Debug] Resultado da query company_users:', {companyUserData, companyError});
-                if (companyError) {
-                    console.error('[AuthContext:Refactored] Erro ao buscar empresa/role:', companyError);
-                    localStorage.removeItem('activeCompany');
-                    setLoading(false);
-                    alert('Erro ao buscar empresa vinculada ao usuário. Faça login novamente.');
-                    window.location.href = '/login';
-                    return;
-                } else if (companyUserData && companyUserData.company) {
-                    finalCompanyData = {
-                        id: companyUserData.company.id,
-                        name: companyUserData.company.name,
-                        role: companyUserData.role as 'admin' | 'user', 
-                    };
-                    console.log('[AuthContext:Refactored] Empresa+role encontrados:', finalCompanyData);
-                    localStorage.setItem('activeCompany', JSON.stringify(finalCompanyData)); 
-                } else {
-                    console.warn('[AuthContext:Refactored] Usuário logado mas sem empresa/role associado encontrado. Redirecionando para login.');
-                    localStorage.removeItem('activeCompany');
-                    setLoading(false);
-                    alert('Nenhuma empresa vinculada ao usuário. Faça login novamente.');
-                    window.location.href = '/login';
-                    return;
-                }
-            } catch (lookupError) {
-                console.error('[AuthContext:Refactored] Erro DETALHADO ao buscar empresa/role:', lookupError);
-                setLoading(false); // ADICIONADO: Garantir que loading finalize em erro inesperado
-            } finally {
-                // Segurança extra: nunca deixe loading travado
-                setLoading(false);
-            }
-
-            // localStorage.removeItem('activeCompany'); // Removido pois limpava a empresa ativa indevidamente
-        }
-
-        else {
-            // console.log('[AuthContext:Refactored] Usuário deslogado ou sessão inicial vazia.'); // Comentado para teste
-            setSession(null); 
-            setUser(null); 
-            finalCompanyData = null; 
-            localStorage.removeItem('activeCompany');
-            setLoading(false); // ADICIONADO: Garantir que loading finalize quando deslogado
-        }
-
-        console.log(`[AuthContext:Refactored] Definindo activeCompany final:`, finalCompanyData);
-        setActiveCompany(finalCompanyData);
-        
-        // Comentado: Bloco if(loading) desnecessário com as correções acima e o finally
-        // if (loading) {
-        //   console.log(`[AuthContext:Refactored] Definindo loading como false.`);
-        //   setLoading(false);
-        // }
-      }
-    );
-
-    return () => {
-      console.log('[AuthContext:Refactored] Limpando inscrição onAuthStateChange.');
-      subscription.unsubscribe();
-    };
-  }, []); 
-
-  useEffect(() => {
-    if (user && needsPasswordChange) {
-      checkPasswordChangeRequirement();
-    }
-  }, [user, needsPasswordChange]);
-
-  const signOut = async () => {
-    console.log('[AuthContext:Refactored] Iniciando signOut...');
-    await supabase.auth.signOut();
-    localStorage.removeItem('activeCompany');
-    queryClient.clear(); 
-    console.log('[AuthContext:Refactored] signOut concluído.');
-  };
-
-  const isAuthenticated = !!user;
-  const isAdmin = activeCompany?.role === 'admin';
-
-  return (
-    <AuthContext.Provider value={{
-      isAuthenticated,
-      user,
-      loading,
-      activeCompany,
-      setActiveCompany, 
-      isAdmin,
-      signOut,
-      needsPasswordChange,
-      setNeedsPasswordChange,
-      checkPasswordChangeRequirement,
-    }}>
-      {children}
-    </AuthContext.Provider>
-  );
-}
-
-export function useAuth() {
+// Hook customizado para usar o contexto de autenticação
+export const useAuth = () => {
   const context = useContext(AuthContext);
   if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
+};
+
+// Componente Provedor
+interface AuthProviderProps {
+  children: React.ReactNode;
 }
+
+// Contador para IDs únicos de listener e evento (apenas para debug)
+let listenerIdCounter = 0;
+let eventIdCounter = 0;
+
+export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
+  console.log('[AuthProvider] Componente AuthProvider Montando/Renderizando...'); // Log de montagem/renderização
+  const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [loading, setLoading] = useState<boolean>(true); // Inicia como true
+  const [activeCompany, setActiveCompanyState] = useState<ActiveCompanyData | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null); // Estado de erro
+  const [needsPasswordChange, setNeedsPasswordChange] = useState<boolean>(false); // Estado para mudança de senha
+
+  // const navigate = useNavigate(); // Hook de navegação - Removido pois não é usado diretamente aqui
+
+  // Função para definir a empresa ativa (e salvar no localStorage)
+  const setActiveCompany = useCallback(
+    (companyData: ActiveCompanyData | null) => {
+      console.log('[AuthContext] setActiveCompany chamado com:', companyData);
+      setActiveCompanyState(companyData);
+      if (companyData) {
+        localStorage.setItem('activeCompany', JSON.stringify(companyData));
+      } else {
+        localStorage.removeItem('activeCompany');
+      }
+    },
+    []
+  );
+
+  // Função de signOut
+  const signOut = useCallback(async () => {
+    console.log('[AuthContext] Iniciando signOut...');
+    setAuthError(null); // Limpa erro ao deslogar
+    localStorage.removeItem('activeCompany'); // Remove empresa ativa do localStorage
+    setActiveCompanyState(null); // Limpa estado da empresa ativa
+    setUser(null); // Limpa usuário
+    setSession(null); // Limpa sessão
+    setLoading(false); // Garante que não fique carregando
+    try {
+      await supabase.auth.signOut();
+    } catch (error) {
+      console.error("[AuthContext] Erro durante supabase.auth.signOut:", error);
+    }
+    queryClient.clear(); // Limpa cache do React Query
+    console.log('[AuthContext] signOut concluído.');
+    // Navegação para login é feita pelo ProtectedRoute ou AuthErrorHandler
+  }, []);
+
+  // Efeito para verificar se a senha precisa ser alterada
+  const checkPasswordChangeRequirement = useCallback(async (currentUser: User | null) => {
+    // Verifica o metadado que pode vir do Supabase Auth ou do seu backend
+    const needsChange = currentUser?.user_metadata?.needs_password_change ?? false;
+    console.log(`[AuthContext] checkPasswordChangeRequirement para user ${currentUser?.id}. Needs change: ${needsChange}`);
+    setNeedsPasswordChange(needsChange);
+    // Não faz redirecionamento aqui, deixa isso para a UI
+  }, []);
+
+  // Efeito principal para lidar com o estado de autenticação
+  useEffect(() => {
+    const listenerInstanceId = ++listenerIdCounter; // ID único para esta instância do listener
+    console.log(`[AuthContext Listener #${listenerInstanceId}] Montando AuthProvider e configurando onAuthStateChange...`);
+    setLoading(true); // Garante que loading é true ao iniciar
+    setAuthError(null); // Limpa erros anteriores ao iniciar
+
+    // Tenta carregar a empresa ativa do localStorage na montagem inicial
+    let initialCompanyFromStorage: ActiveCompanyData | null = null;
+    try {
+      const storedCompany = localStorage.getItem('activeCompany');
+      if (storedCompany) {
+        initialCompanyFromStorage = JSON.parse(storedCompany);
+        console.log(`[AuthContext Listener #${listenerInstanceId}] Empresa ativa encontrada no localStorage.`, initialCompanyFromStorage);
+        // Não define o estado ainda, espera a confirmação da sessão
+      } else {
+        console.log(`[AuthContext Listener #${listenerInstanceId}] Nenhuma empresa ativa no localStorage.`);
+      }
+    } catch (e) {
+      console.error(`[AuthContext Listener #${listenerInstanceId}] Erro ao ler empresa ativa do localStorage:`, e);
+      localStorage.removeItem('activeCompany'); // Limpa em caso de erro de parse
+    }
+
+    // Configura o listener do Supabase
+    console.log(`[AuthContext Listener #${listenerInstanceId}] ANTES de supabase.auth.onAuthStateChange`);
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      const eventInstanceId = ++eventIdCounter; // ID único para este evento
+      console.log(
+        `[AuthContext Listener #${listenerInstanceId} Event #${eventInstanceId}] === Evento onAuthStateChange Recebido === Event:`, event,
+        'Session:', session ? { user: session.user ? { id: session.user.id, email: session.user.email, aud: session.user.aud } : null, expires_at: session.expires_at } : null // Log seguro
+      );
+
+      setSession(session);
+      const currentUser = session?.user ?? null;
+      setUser(currentUser);
+      setAuthError(null); // Limpa erro a cada novo evento relevante
+      setLoading(true); // Define loading como true no início do processamento do evento
+
+      // Lógica principal baseada no usuário da sessão
+      if (currentUser) {
+        console.log(
+          `[AuthContext Listener #${listenerInstanceId} Event #${eventInstanceId}] Usuário ${currentUser.id} presente na sessão.`
+        );
+
+        // Verifica necessidade de mudança de senha
+        await checkPasswordChangeRequirement(currentUser);
+
+        // Verifica se a empresa carregada do localStorage pertence ao usuário atual
+        let companyToUse: ActiveCompanyData | null = null;
+        if (initialCompanyFromStorage && initialCompanyFromStorage.user_id === currentUser.id) {
+          console.log(`[AuthContext Listener #${listenerInstanceId} Event #${eventInstanceId}] Empresa do localStorage (${initialCompanyFromStorage.id}) pertence ao usuário atual. Usando-a.`);
+          companyToUse = initialCompanyFromStorage;
+          setActiveCompanyState(companyToUse); // Define o estado com a empresa do storage
+          setLoading(false); // Já temos a empresa, podemos parar de carregar
+        } else {
+          if (initialCompanyFromStorage) {
+            console.log(`[AuthContext Listener #${listenerInstanceId} Event #${eventInstanceId}] Empresa do localStorage (${initialCompanyFromStorage.id}) NÃO pertence ao usuário atual (${currentUser.id}). Ignorando e buscando do DB.`);
+            localStorage.removeItem('activeCompany'); // Limpa storage inválido
+          }
+          console.log(
+            `[AuthContext Listener #${listenerInstanceId} Event #${eventInstanceId}] Nenhuma empresa válida do storage. Buscando empresa+role para user ${currentUser.id}`
+          );
+          let finalCompanyData: ActiveCompanyData | null = null;
+          try {
+            console.log(
+              `[AuthContext Listener #${listenerInstanceId} Event #${eventInstanceId}] ANTES da query company_users para user ${currentUser.id}`
+            );
+            const { data: companyUserData, error: companyError } = await supabase
+              .from('company_users')
+              .select('role, company:company_id(id, name)') // Ajuste os campos conforme necessário
+              .eq('user_id', currentUser.id)
+              .limit(1)
+              .maybeSingle();
+
+            console.log(
+              `[AuthContext Listener #${listenerInstanceId} Event #${eventInstanceId}] DEPOIS da query company_users. Resultado:`, {
+                companyUserData: companyUserData ? { role: companyUserData.role, company: companyUserData.company } : null,
+                companyError: companyError ? { message: companyError.message, code: companyError.code } : null
+              }
+            );
+
+            if (companyError) {
+              console.error(
+                `[AuthContext Listener #${listenerInstanceId} Event #${eventInstanceId}] Erro ao buscar empresa/role:`, companyError
+              );
+              setAuthError('Erro ao buscar dados da empresa vinculada. Tente novamente mais tarde.');
+              finalCompanyData = null;
+            } else if (companyUserData?.company && companyUserData?.role) {
+              finalCompanyData = {
+                id: companyUserData.company.id,
+                name: companyUserData.company.name,
+                role: companyUserData.role,
+                user_id: currentUser.id, // Associa ao usuário atual
+              };
+              console.log(
+                `[AuthContext Listener #${listenerInstanceId} Event #${eventInstanceId}] Empresa/role encontrados via DB:`, finalCompanyData
+              );
+              setAuthError(null);
+            } else {
+              console.warn(
+                `[AuthContext Listener #${listenerInstanceId} Event #${eventInstanceId}] Usuário logado mas sem empresa/role associado válido encontrado no DB.`
+              );
+              setAuthError('Nenhuma empresa ou função válida está vinculada a este usuário.');
+              finalCompanyData = null;
+            }
+          } catch (lookupError) {
+            console.error(
+              `[AuthContext Listener #${listenerInstanceId} Event #${eventInstanceId}] Erro GERAL (try/catch) ao buscar empresa/role:`, lookupError
+            );
+            setAuthError('Ocorreu um erro inesperado ao carregar seus dados de acesso.');
+            finalCompanyData = null;
+          } finally {
+            console.log(
+              `[AuthContext Listener #${listenerInstanceId} Event #${eventInstanceId}] Bloco FINALLY da busca company_users. Definindo empresa e loading = false.`
+            );
+            // Define a empresa (ou null) APÓS a busca e limpa o storage se a busca falhou
+            setActiveCompany(finalCompanyData);
+            setLoading(false); // Garante que loading seja false após a tentativa de busca
+          }
+        }
+
+      } else {
+        // Usuário deslogado ou sessão inicial nula/inválida
+        console.log(
+          `[AuthContext Listener #${listenerInstanceId} Event #${eventInstanceId}] Usuário nulo na sessão. Limpando dados e definindo loading = false.`
+        );
+        setUser(null);
+        setSession(null);
+        setActiveCompany(null); // Garante limpeza da empresa ativa
+        setAuthError(null); // Limpa erros
+        setLoading(false); // Define loading como false
+      }
+      console.log(`[AuthContext Listener #${listenerInstanceId} Event #${eventInstanceId}] === Fim do Processamento do Evento ===`);
+    });
+    console.log(`[AuthContext Listener #${listenerInstanceId}] DEPOIS de supabase.auth.onAuthStateChange`);
+
+    // Função de limpeza ao desmontar o componente
+    return () => {
+      console.log(`[AuthContext Listener #${listenerInstanceId}] Desmontando AuthProvider e cancelando inscrição onAuthStateChange.`);
+      subscription?.unsubscribe();
+    };
+  }, [setActiveCompany, signOut, checkPasswordChangeRequirement]); // Removido activeCompany das dependências para evitar loops
+
+  // Calcula isAdmin baseado no role da empresa ativa
+  const isAdmin = useMemo(() => activeCompany?.role === 'admin', [activeCompany]);
+
+  // Monta o valor do contexto
+  const value = useMemo(
+    () => ({
+      user,
+      session,
+      isAuthenticated: !!user, // Derivado de user
+      loading,
+      activeCompany,
+      setActiveCompany,
+      signOut,
+      authError,
+      isAdmin, // Inclui isAdmin no contexto
+      needsPasswordChange, // Inclui needsPasswordChange
+    }),
+    [user, session, loading, activeCompany, setActiveCompany, signOut, authError, isAdmin, needsPasswordChange]
+  );
+
+  console.log(`[AuthProvider Render] Fornecendo valor: isAuthenticated=${value.isAuthenticated}, loading=${value.loading}, user=${value.user?.id}, company=${value.activeCompany?.id}, error=${value.authError}`); // Log resumido no render
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+};
+
+// Exporta o hook useAuth e o componente AuthProvider
+// export default AuthProvider; // Comentado se já houver export default no arquivo

@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
@@ -7,6 +6,7 @@ import {
   createProductionOrder, 
   updateProductionOrderStatus, 
   getProductionOrder, 
+  // updateProductionOrder, // REMOVER - Não existe no serviço
   ProductionOrderItem 
 } from "@/services/productionOrderService";
 import { getAllRecipeIngredients, getRecipes, Recipe } from "@/services/recipeService";
@@ -101,8 +101,10 @@ export default function useProductionOrder({ id, calendarItems, calendarDate }: 
   }, [calendarItems, calendarDate, recipes]);
   
   const loadProductionOrder = async (orderId: string) => {
+    if (!activeCompany?.id) return; // Adiciona verificação
     try {
-      const order = await getProductionOrder(orderId);
+      // Passar companyId como segundo argumento
+      const order = await getProductionOrder(orderId, activeCompany.id); 
       
       if (order) {
         setOrderNumber(order.order_number);
@@ -157,6 +159,8 @@ export default function useProductionOrder({ id, calendarItems, calendarDate }: 
     const materialsMap = new Map<string, MaterialItem>();
     let materialId = 1;
     
+    if (!activeCompany?.id) return; // Adiciona verificação
+
     try {
       for (const orderRecipe of orderRecipes) {
         const recipe = recipes.find(r => r.id === orderRecipe.recipeId);
@@ -169,7 +173,8 @@ export default function useProductionOrder({ id, calendarItems, calendarDate }: 
             quantityInKg = orderRecipe.quantity * (recipe.yield_kg / recipe.yield_units);
           }
           
-          const ingredients = await getAllRecipeIngredients(recipe.id, quantityInKg);
+          // Garantir que companyId (activeCompany.id) está sendo passado
+          const ingredients = await getAllRecipeIngredients(recipe.id, activeCompany.id, quantityInKg);
           
           for (const ingredient of ingredients) {
             if (ingredient.product_id && ingredient.product) {
@@ -246,15 +251,30 @@ export default function useProductionOrder({ id, calendarItems, calendarDate }: 
         unit: recipe.unit
       }));
       
-      success = await createProductionOrder(
-        {
-          order_number: orderNumber,
-          date: orderDate,
-          status: 'pending',
-          adjust_materials: orderOrigin === 'calendar'  // Flag to identify origin
-        },
-        items
-      );
+      if (id) {
+        // ATENÇÃO: Não há função de serviço para atualizar detalhes gerais do pedido.
+        // Apenas o status pode ser atualizado via handleStatusUpdate.
+        // Se precisar editar detalhes, uma nova função 'updateProductionOrder' seria necessária no serviço.
+        // Por agora, a edição de detalhes não será salva.
+        toast({
+          title: "Edição não suportada",
+          description: "Apenas a criação de novos pedidos e a atualização de status são suportadas no momento.",
+          variant: "default" // Mudar para 'default' ou 'destructive'
+        });
+        success = false; // Define success como false para não redirecionar
+      } else {
+        // Criação (objeto precisa de companyId)
+        success = await createProductionOrder(
+          {
+            order_number: orderNumber,
+            date: orderDate,
+            status: 'pending', // Status inicial na criação
+            adjust_materials: orderOrigin === 'calendar',
+            companyId: activeCompany.id, // Adicionar companyId aqui
+          },
+          items
+        );
+      }
       
       if (success) {
         navigate('/production-orders');
@@ -272,21 +292,29 @@ export default function useProductionOrder({ id, calendarItems, calendarDate }: 
   };
   
   const handleStatusUpdate = async (newStatus: 'pending' | 'in_progress' | 'completed') => {
-    if (!id) return;
+    if (!id || !activeCompany?.id) return; // Adiciona verificação
     
     setLoading(true);
-    
-    const success = await updateProductionOrderStatus(id, newStatus);
-    
-    if (success) {
-      setOrderStatus(newStatus);
-      
-      if (newStatus === 'completed') {
-        navigate(`/production-confirmation/${id}`);
+    try {
+      // Passar companyId como terceiro argumento
+      const success = await updateProductionOrderStatus(id, newStatus, activeCompany.id);
+      if (success) {
+        setOrderStatus(newStatus);
+        
+        if (newStatus === 'completed') {
+          navigate(`/production-confirmation/${id}`);
+        }
       }
+    } catch (error) {
+      console.error("Erro ao atualizar status:", error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível atualizar o status do pedido de produção.",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
     }
-    
-    setLoading(false);
   };
 
   return {

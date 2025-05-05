@@ -1,33 +1,46 @@
-
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { Group } from '@/services/groupService';
 
 export const useGroupSelection = () => {
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
 
-  const initializeExpandedGroups = (groups: Group[]) => {
-    const initialExpanded: Record<string, boolean> = {};
-    groups.forEach(group => {
-      initialExpanded[group.id] = expandedGroups[group.id] !== undefined ? 
-        expandedGroups[group.id] : true;
-    });
-    setExpandedGroups(initialExpanded);
-  };
+  const initializeOrUpdateExpandedGroups = useCallback((groups: Group[]) => {
+    setExpandedGroups(prevExpanded => {
+      const newExpanded = { ...prevExpanded }; 
+      let changed = false;
 
-  const toggleGroupExpansion = (groupId: string, e: React.MouseEvent) => {
+      groups.forEach(group => {
+        if (prevExpanded[group.id] === undefined) { 
+          newExpanded[group.id] = false; 
+          changed = true;
+        }
+      });
+
+      Object.keys(prevExpanded).forEach(groupId => {
+        if (!groups.some(g => g.id === groupId)) {
+          delete newExpanded[groupId];
+          changed = true;
+        }
+      });
+
+      return changed ? newExpanded : prevExpanded;
+    });
+  }, []); 
+
+  const toggleGroupExpansion = useCallback((groupId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     setExpandedGroups(prev => ({
       ...prev,
       [groupId]: !prev[groupId]
     }));
-  };
+  }, []); 
 
   return {
     selectedGroup,
     setSelectedGroup,
     expandedGroups,
-    initializeExpandedGroups,
+    initializeOrUpdateExpandedGroups, 
     toggleGroupExpansion
   };
 };

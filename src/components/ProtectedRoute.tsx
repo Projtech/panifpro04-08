@@ -1,16 +1,14 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { useSessionCheck } from '@/hooks/useSessionCheck';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
+  adminOnly?: boolean; 
 }
 
-export function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const { isAuthenticated, loading } = useAuth();
+export function ProtectedRoute({ children, adminOnly = false }: ProtectedRouteProps) { 
+  const { isAuthenticated, loading, isAdmin } = useAuth();
   const location = useLocation();
-
-  useSessionCheck();
 
   console.log('[ProtectedRoute] Render: isAuthenticated =', isAuthenticated, '| loading =', loading);
 
@@ -22,6 +20,11 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   if (!isAuthenticated) {
     console.log('[ProtectedRoute] Redirecionando para login (isAuthenticated = false)');
     return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  if (adminOnly && !isAdmin) {
+    console.warn('[ProtectedRoute] Acesso negado: Rota requer privilégios de admin.');
+    return <Navigate to="/" replace state={{ error: 'Acesso não autorizado' }} />;
   }
 
   console.log('[ProtectedRoute] Renderizando children protegidos!');

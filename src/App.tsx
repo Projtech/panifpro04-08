@@ -14,6 +14,7 @@ import { Login } from "./pages/Auth/Login";
 import { Signup } from "./pages/Auth/Signup";
 import { SelectCompany } from "./pages/Company/SelectCompany";
 import { UserManagement } from "./pages/Admin/UserManagement";
+import { AuthErrorHandler } from './components/AuthErrorHandler';
 
 // Application Components
 import AppLayout from "./components/Layout/AppLayout";
@@ -55,6 +56,7 @@ const App = () => {
         <Sonner />
         <AuthProvider>
           <BrowserRouter>
+            <AuthErrorHandler />
             <Routes>
               {/* Rotas públicas */}
               <Route path="/login" element={<Login />} />

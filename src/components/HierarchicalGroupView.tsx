@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Group, Subgroup } from '@/services/groupService';
 import { FolderTree } from 'lucide-react';
@@ -29,12 +28,12 @@ const HierarchicalGroupView: React.FC<HierarchicalGroupViewProps> = ({
 }) => {
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const { expandedGroups, initializeExpandedGroups, toggleGroupExpansion } = useGroupSelection();
+  const { expandedGroups, initializeOrUpdateExpandedGroups, toggleGroupExpansion } = useGroupSelection();
 
-  // Inicializar expandedGroups quando os grupos mudarem
+  // Atualiza o estado de expansão de forma segura quando os grupos mudam
   useEffect(() => {
-    initializeExpandedGroups(groups);
-  }, [groups]);
+    initializeOrUpdateExpandedGroups(groups); // Chama a função segura
+  }, [groups, initializeOrUpdateExpandedGroups]); // Adiciona a função às dependências
 
   // Filtragem por termo de busca
   const filteredGroups = searchTerm 

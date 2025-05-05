@@ -43,7 +43,7 @@ export default function ProductionOrders() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<OrderStatus | null>(null);
   const [loading, setLoading] = useState(true);
-  const { activeCompany, loading: authLoading, isSessionReady } = useAuth();
+  const { activeCompany, loading: authLoading } = useAuth();
   
   const navigate = useNavigate();
   
@@ -52,16 +52,23 @@ export default function ProductionOrders() {
     // Novo log detalhado
     console.log('[ProductionOrders] useEffect check:', {
       authLoading,
-      companyId: activeCompany?.id,
-      isSessionReady
+      companyId: activeCompany?.id
     });
     const loadData = async () => {
       setLoading(true);
       try {
-        if (!isSessionReady || !activeCompany?.id) {
-          toast.error('Empresa ativa não carregada. Tente novamente mais tarde.');
+        // Espera o loading da autenticação terminar
+        if (authLoading) {
+          console.log('[ProductionOrders] Aguardando autenticação/empresa carregar...');
+          // Não busca dados ainda, espera o próximo render quando authLoading for false.
+          return;
+        }
+        // Após authLoading ser false, verifica se a empresa ativa existe
+        if (!activeCompany?.id) {
+          console.error('[ProductionOrders] Empresa ativa não encontrada após autenticação.');
+          toast.error('Empresa ativa não carregada. Verifique sua seleção de empresa.');
           setOrders([]);
-          setLoading(false);
+          setLoading(false); // Termina o loading da página (com erro)
           return;
         }
         const ordersData = await getProductionOrders(activeCompany.id);
@@ -74,7 +81,7 @@ export default function ProductionOrders() {
       }
     };
     loadData();
-  }, [isSessionReady, activeCompany]);
+  }, [authLoading, activeCompany?.id]);
   
   const filteredOrders = orders.filter(order => {
     const matchesSearch = 

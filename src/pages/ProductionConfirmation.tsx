@@ -41,6 +41,8 @@ import {
   RecipeProductionItem
 } from "@/services/inventoryService";
 
+import { useAuth } from '@/contexts/AuthContext';
+
 export default function ProductionConfirmation() {
   const { id } = useParams();
   const [loading, setLoading] = useState(false);
@@ -54,36 +56,45 @@ export default function ProductionConfirmation() {
   
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { activeCompany, loading: authLoading } = useAuth();
   
   useEffect(() => {
     const loadPendingOrders = async () => {
-      setLoading(true);
-      if (authLoading || !activeCompany?.id) {
+      // Espera o loading da autenticação terminar
+      if (authLoading) {
+        console.log('[ProductionConfirmation] Aguardando autenticação...');
+        return;
+      }
+      if (!activeCompany?.id) {
+        console.error('[ProductionConfirmation] Empresa ativa não encontrada.');
         toast({ title: 'Empresa ativa não carregada.', variant: 'destructive' });
         setPendingOrders([]);
         setLoading(false);
         return;
       }
+      setLoading(true);
       const orders = await getPendingProductionOrders(activeCompany.id);
       setPendingOrders(orders);
       setLoading(false);
     };
-    
     loadPendingOrders();
-  }, []);
+  }, [authLoading, activeCompany?.id]);
   
   useEffect(() => {
     const loadOrder = async () => {
+      if (authLoading) {
+        console.log('[ProductionConfirmation] Aguardando autenticação...');
+        return;
+      }
       if (!id) return;
-      
-      setLoading(true);
-      if (authLoading || !activeCompany?.id) {
+      if (!activeCompany?.id) {
+        console.error('[ProductionConfirmation] Empresa ativa não encontrada.');
         toast({ title: 'Empresa ativa não carregada.', variant: 'destructive' });
         setLoading(false);
         return;
       }
+      setLoading(true);
       const order = await getProductionOrder(id, activeCompany.id);
-      
       if (order) {
         setSelectedOrderId(order.id);
         setCurrentOrder(order);
@@ -91,12 +102,10 @@ export default function ProductionConfirmation() {
       } else {
         navigate('/production-orders');
       }
-      
       setLoading(false);
     };
-    
     loadOrder();
-  }, [id, navigate]);
+  }, [id, navigate, authLoading, activeCompany?.id]);
   
   const handleOrderSelect = async (orderId: string) => {
     setSelectedOrderId(orderId);
@@ -146,7 +155,16 @@ export default function ProductionConfirmation() {
     
     setLoading(true);
     
-    const success = await confirmProductionOrder(selectedOrderId, items, notes || null);
+    if (!activeCompany?.id) {
+  toast({
+    title: "Empresa ativa não carregada.",
+    description: "Não foi possível confirmar a produção sem empresa ativa.",
+    variant: "destructive"
+  });
+  setLoading(false);
+  return;
+}
+const success = await confirmProductionOrder(selectedOrderId, items, activeCompany.id, notes || null);
     
     if (success) {
       const productionItems: RecipeProductionItem[] = items.map(item => ({
@@ -156,11 +174,14 @@ export default function ProductionConfirmation() {
         actualQuantityUnits: item.actual_quantity_units || 0
       }));
       
-      await processProductionOrderInventoryTransactions(
-        selectedOrderId,
-        productionItems,
-        adjustMaterials
-      );
+      if (activeCompany?.id) {
+        await processProductionOrderInventoryTransactions(
+          selectedOrderId,
+          productionItems,
+          adjustMaterials,
+          activeCompany.id
+        );
+      }
       
       navigate('/production-orders');
     }
