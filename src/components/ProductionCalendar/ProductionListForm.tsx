@@ -66,6 +66,8 @@ export default function ProductionListForm({
 
   // Carregar produtos disponíveis
   useEffect(() => {
+    // Novo log detalhado
+    console.log('[ProductionListForm] useEffect fetchProducts check:', { companyId });
     const fetchProducts = async () => {
       if (!companyId) {
         console.error("ProductionListForm: companyId não fornecido via props.");

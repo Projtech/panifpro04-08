@@ -7,15 +7,20 @@ import { queryClient } from '@/lib/react-query';
 interface Company {
   id: string;
   name: string;
+}
+
+interface CompanyUserRole {
   role: 'admin' | 'user';
 }
+
+interface CombinedCompanyData extends Company, CompanyUserRole {}
 
 interface AuthContextType {
   isAuthenticated: boolean;
   user: User | null;
   loading: boolean;
-  activeCompany: Company | null;
-  setActiveCompany: (company: Company | null) => void;
+  activeCompany: CombinedCompanyData | null;
+  setActiveCompany: (company: CombinedCompanyData | null) => void;
   isAdmin: boolean;
   signOut: () => Promise<void>;
   needsPasswordChange: boolean;
@@ -29,9 +34,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeCompany, setActiveCompany] = useState<Company | null>(null);
+  const [activeCompany, setActiveCompany] = useState<CombinedCompanyData | null>(null);
   const [needsPasswordChange, _setNeedsPasswordChange] = useState(false);
-  // Wrapper para evitar setNeedsPasswordChange redundante
+
   const setNeedsPasswordChange = (value: boolean) => {
     _setNeedsPasswordChange(prev => {
       if (prev !== value) return value;
@@ -39,13 +44,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   }
 
-  // Função para verificar se o usuário precisa trocar a senha
   const checkPasswordChangeRequirement = async () => {
     if (!user) return false;
 
     try {
-      // O perfil deve ser criado pelo trigger do banco de dados.
-      // A política RLS permite que o usuário leia seu próprio perfil.
       console.log('checkPasswordChangeRequirement chamado para user', user?.id);
       const { data, error, status } = await supabase
         .from('profiles')
@@ -53,8 +55,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .eq('id', user.id)
         .maybeSingle();
 
-      // Se o perfil não for encontrado (status 406), pode ser um erro de RLS ou o perfil ainda não foi criado.
-      // Vamos tratar como se não precisasse trocar a senha por enquanto para evitar loops.
       if (status === 406 || (error && error.code === 'PGRST116')) {
         console.warn('Perfil não encontrado ou acesso negado para verificar troca de senha. Assumindo false.', error);
         setNeedsPasswordChange(false);
@@ -68,144 +68,116 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return needsChange;
     } catch (error) {
       console.error('Erro ao verificar requisito de troca de senha:', error);
-      setNeedsPasswordChange(false); // Define como false em caso de erro
+      setNeedsPasswordChange(false); 
       return false;
     }
   };
 
   useEffect(() => {
-    console.log('[AuthContext] useEffect inicial de autenticação disparado');
-    // Verificar se há uma empresa ativa no localStorage
-    const storedCompany = localStorage.getItem('activeCompany');
-    if (storedCompany) {
-      console.log('[AuthContext] Empresa ativa encontrada no localStorage:', storedCompany);
-      setActiveCompany(JSON.parse(storedCompany));
-    } else {
-      console.log('[AuthContext] Nenhuma empresa ativa encontrada no localStorage');
-    }
+    console.log('[AuthContext:Refactored] Configurando onAuthStateChange...');
+    
+    // localStorage.removeItem('activeCompany'); // Comentado: Limpeza desnecessária no início
 
-    // Configurar o listener de autenticação
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        console.log(`[AuthContext:Refactored] onAuthStateChange Event: ${event}, Session:`, session);
+        
+        // Primeiro atualizar o loading para true apenas se não estivermos no evento PASSWORD_RECOVERY
+        if (event !== 'PASSWORD_RECOVERY') {
+          setLoading(true);
+        }
+
+        let finalCompanyData: CombinedCompanyData | null = null; 
+
         if (event === 'PASSWORD_RECOVERY') {
-          setSession(session);
-          setUser(session?.user ?? null);
-          setLoading(false);
-          setNeedsPasswordChange(true);
-          // Não executa signOut ou lógica de empresa aqui!
-          return;
+            console.log('[AuthContext:Refactored] Evento PASSWORD_RECOVERY detectado.');
+            setSession(session);
+            setUser(session?.user ?? null);
+            setActiveCompany(null); 
+            setNeedsPasswordChange(true);
+            setLoading(false); 
+            return;
         }
 
-        // Verificar se a sessão é válida
         if (session?.user) {
-          const { data: { session: validSession } } = await supabase.auth.getSession();
-          if (!validSession) {
-            console.warn('Sessão expirada. Deslogando usuário.');
-            toast.error("Sua sessão expirou. Faça login novamente.");
-            await signOut();
-            return;
-          }
+            console.log(`[AuthContext:Refactored] Usuário ${session.user.id} logado ou sessão inicial válida.`);
+            setSession(session);
+            setUser(session.user);
+
+            console.log(`[AuthContext:Refactored] Buscando empresa+role para user ${session.user.id}`);
+            try {
+                console.log('[AuthContext:Debug] ANTES da query company_users');
+                const { data: companyUserData, error: companyError } = await supabase
+                    .from('company_users')
+                    .select('role, company:company_id(id, name)') 
+                    .eq('user_id', session.user.id)
+                    .limit(1)
+                    .maybeSingle(); 
+                console.log('[AuthContext:Debug] DEPOIS da query company_users');
+                console.log('[AuthContext:Debug] companyUserData:', companyUserData);
+                console.log('[AuthContext:Debug] companyError:', companyError);
+
+                console.log('[AuthContext:Debug] Resultado da query company_users:', {companyUserData, companyError});
+                if (companyError) {
+                    console.error('[AuthContext:Refactored] Erro ao buscar empresa/role:', companyError);
+                    localStorage.removeItem('activeCompany');
+                    setLoading(false);
+                    alert('Erro ao buscar empresa vinculada ao usuário. Faça login novamente.');
+                    window.location.href = '/login';
+                    return;
+                } else if (companyUserData && companyUserData.company) {
+                    finalCompanyData = {
+                        id: companyUserData.company.id,
+                        name: companyUserData.company.name,
+                        role: companyUserData.role as 'admin' | 'user', 
+                    };
+                    console.log('[AuthContext:Refactored] Empresa+role encontrados:', finalCompanyData);
+                    localStorage.setItem('activeCompany', JSON.stringify(finalCompanyData)); 
+                } else {
+                    console.warn('[AuthContext:Refactored] Usuário logado mas sem empresa/role associado encontrado. Redirecionando para login.');
+                    localStorage.removeItem('activeCompany');
+                    setLoading(false);
+                    alert('Nenhuma empresa vinculada ao usuário. Faça login novamente.');
+                    window.location.href = '/login';
+                    return;
+                }
+            } catch (lookupError) {
+                console.error('[AuthContext:Refactored] Erro DETALHADO ao buscar empresa/role:', lookupError);
+                setLoading(false); // ADICIONADO: Garantir que loading finalize em erro inesperado
+            } finally {
+                // Segurança extra: nunca deixe loading travado
+                setLoading(false);
+            }
+
+            // localStorage.removeItem('activeCompany'); // Removido pois limpava a empresa ativa indevidamente
         }
 
-        setSession(session);
-        setUser(session?.user ?? null);
-        setLoading(false);
-
-        // --- BLOQUEIO POR ASSOCIAÇÃO DE EMPRESA ---
-        if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user) {
-          const { data, error } = await supabase
-            .from('company_users')
-            .select('company_id, company:company_id(name), role')
-            .eq('user_id', session.user.id);
-
-          if (!error && (!data || data.length !== 1)) {
-            sessionStorage.setItem('loginError', 'no_company_assoc'); // Define a flag de erro
-            console.warn(`Usuário ${session.user.id} não possui associação única de empresa válida. Deslogando.`);
-            await signOut();
-            return;
-          }
-
-          if (!error && data && data.length === 1) {
-            const companyData = data[0];
-            const company: Company = {
-              id: companyData.company_id,
-              name: companyData.company?.name || '',
-              role: companyData.role === 'admin' ? 'admin' : 'user',
-            };
-            setActiveCompany(company);
-            localStorage.setItem('activeCompany', JSON.stringify(company));
-          }
+        else {
+            // console.log('[AuthContext:Refactored] Usuário deslogado ou sessão inicial vazia.'); // Comentado para teste
+            setSession(null); 
+            setUser(null); 
+            finalCompanyData = null; 
+            localStorage.removeItem('activeCompany');
+            setLoading(false); // ADICIONADO: Garantir que loading finalize quando deslogado
         }
 
-        if (event === 'SIGNED_OUT') {
-          setSession(null);
-          setUser(null);
-          setActiveCompany(null);
-          setLoading(false);
-          setNeedsPasswordChange(false);
-          // Removido: toast.info("Você foi deslogado.");
-        }
+        console.log(`[AuthContext:Refactored] Definindo activeCompany final:`, finalCompanyData);
+        setActiveCompany(finalCompanyData);
+        
+        // Comentado: Bloco if(loading) desnecessário com as correções acima e o finally
+        // if (loading) {
+        //   console.log(`[AuthContext:Refactored] Definindo loading como false.`);
+        //   setLoading(false);
+        // }
       }
     );
 
-    // Carregar sessão inicial
-    console.log('[AuthContext] Carregando sessão inicial via supabase.auth.getSession()...');
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      console.log('[AuthContext] Sessão inicial recebida:', session);
-      if (!session || !session.user) {
-        setSession(null);
-        setUser(null);
-        setActiveCompany(null);
-        setLoading(false);
-        setNeedsPasswordChange(false);
-        console.log('[AuthContext] Sessão ausente ou inválida na inicialização: estados limpos e loading finalizado.');
-        return;
-      }
-      setSession(session);
-      setUser(session.user);
-      console.log('[AuthContext] setSession/setUser chamados na inicialização. setLoading(false) será chamado agora');
-      setLoading(false);
-      console.log('[AuthContext] setLoading(false) chamado após inicialização de sessão');
-
-      // --- BLOQUEIO POR ASSOCIAÇÃO DE EMPRESA ---
-      if (session?.user) {
-        console.log('[AuthContext] Buscando empresa associada ao usuário (sessão inicial)', session.user.id);
-        const { data, error } = await supabase
-          .from('company_users')
-          .select('company_id, company:company_id(name), role')
-          .eq('user_id', session.user.id);
-
-        if (!error && (!data || data.length !== 1)) {
-          sessionStorage.setItem('loginError', 'no_company_assoc'); // Define a flag de erro
-          console.warn(`Usuário ${session.user.id} não possui associação única de empresa válida. Deslogando.`);
-          await signOut();
-          return;
-        }
-
-        if (!error && data && data.length === 1) {
-          const companyData = data[0];
-          const company: Company = {
-            id: companyData.company_id,
-            name: companyData.company?.name || '',
-            role: companyData.role === 'admin' ? 'admin' : 'user',
-          };
-          console.log('[AuthContext] Empresa associada encontrada (sessão inicial):', company);
-          setActiveCompany(company);
-          localStorage.setItem('activeCompany', JSON.stringify(company));
-        }
-      }
-    }).catch((err) => {
-      console.error('[AuthContext] Erro ao carregar sessão inicial:', err);
-      setLoading(false);
-      console.log('[AuthContext] setLoading(false) chamado após erro na inicialização de sessão');
-    });
-
     return () => {
+      console.log('[AuthContext:Refactored] Limpando inscrição onAuthStateChange.');
       subscription.unsubscribe();
     };
-  }, []);
+  }, []); 
 
-  // Verificar troca de senha quando o usuário mudar ou needsPasswordChange for true
   useEffect(() => {
     if (user && needsPasswordChange) {
       checkPasswordChangeRequirement();
@@ -213,21 +185,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user, needsPasswordChange]);
 
   const signOut = async () => {
+    console.log('[AuthContext:Refactored] Iniciando signOut...');
     await supabase.auth.signOut();
     localStorage.removeItem('activeCompany');
-    setActiveCompany(null);
-    // Limpar todo o cache do React Query
-    queryClient.clear();
-  };
-
-  // Atualizar localStorage quando a empresa ativa mudar
-  const handleSetActiveCompany = (company: Company | null) => {
-    setActiveCompany(company);
-    if (company) {
-      localStorage.setItem('activeCompany', JSON.stringify(company));
-    } else {
-      localStorage.removeItem('activeCompany');
-    }
+    queryClient.clear(); 
+    console.log('[AuthContext:Refactored] signOut concluído.');
   };
 
   const isAuthenticated = !!user;
@@ -239,12 +201,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       loading,
       activeCompany,
-      setActiveCompany: handleSetActiveCompany,
+      setActiveCompany, 
       isAdmin,
       signOut,
       needsPasswordChange,
       setNeedsPasswordChange,
-      checkPasswordChangeRequirement
+      checkPasswordChangeRequirement,
     }}>
       {children}
     </AuthContext.Provider>

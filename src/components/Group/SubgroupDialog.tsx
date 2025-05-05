@@ -6,6 +6,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -51,6 +52,9 @@ const SubgroupDialog: React.FC<SubgroupDialogProps> = ({
           <DialogTitle>
             {subgroupForm.id ? 'Editar Subgrupo' : 'Novo Subgrupo'}
           </DialogTitle>
+          <DialogDescription id="subgroup-dialog-description">
+            Preencha os dados do subgrupo abaixo. Os campos marcados com * são obrigatórios.
+          </DialogDescription>
         </DialogHeader>
         
         <div className="py-4 space-y-4">

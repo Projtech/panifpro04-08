@@ -27,7 +27,7 @@ const DeleteDialog: React.FC<DeleteDialogProps> = ({
 }) => {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[400px]">
+      <DialogContent className="sm:max-w-[400px]" aria-describedby="delete-dialog-description">
         <DialogHeader>
           <DialogTitle>Confirmar Exclusão</DialogTitle>
         </DialogHeader>

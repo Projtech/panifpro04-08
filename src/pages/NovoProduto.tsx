@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import ProductForm from '@/components/ProductForm';
+import ProductForm, { ProductFormData, SubmissionData } from '@/components/ProductForm';
 import { createProduct } from '@/services/productService';
 import { getGroups, getSubgroups, Group, Subgroup } from "@/services/groupService";
 import { useAuth } from '@/contexts/AuthContext';
@@ -10,7 +10,6 @@ import { Loader2 } from 'lucide-react';
 
 // Define types locally based on the Database schema
 type Product = Database['public']['Tables']['products']['Row'];
-type ProductFormData = Omit<Product, 'id'>;
 
 function NovoProduto() {
   const navigate = useNavigate();
@@ -68,7 +67,7 @@ function NovoProduto() {
   }, [authLoading, activeCompany?.id]);
 
   // Handle form submission (creation)
-  const handleCreateSubmit = async (formData: ProductFormData) => {
+  const handleCreateSubmit = async (formData: SubmissionData) => {
     if (authLoading || !activeCompany?.id) {
       toast.error("Empresa ativa não carregada. Tente novamente mais tarde.");
       return;
@@ -91,6 +90,33 @@ function NovoProduto() {
     }
   };
 
+  // Define initial data with correct type
+  const newProductInitialData: Partial<ProductFormData> = {
+    name: '',
+    sku: '',
+    unit: 'UN',
+    supplier: null,
+    cost: 0,
+    current_stock: null,
+    min_stock: 0,
+    group_id: null,
+    subgroup_id: null,
+    code: null,
+    kg_weight: null,
+    unit_price: null,
+    unit_weight: null,
+    recipe_id: null,
+    product_type: 'materia_prima',
+    ativo: true,
+    monday: false,
+    tuesday: false,
+    wednesday: false,
+    thursday: false,
+    friday: false,
+    saturday: false,
+    sunday: false,
+    all_days: false
+  };
 
   if (initialLoading) {
     return (
@@ -106,31 +132,8 @@ function NovoProduto() {
       {/* <h1 className="text-2xl font-bold mb-6">Novo Produto</h1> REMOVED - ProductForm has title */}
       {/* Replace the placeholder with the actual form */}
       <ProductForm
-        initialData={{
-          name: '',
-          sku: '',
-          unit: 'UN',
-          supplier: null,
-          cost: 0,
-          current_stock: null,
-          min_stock: 0,
-          group_id: null,
-          subgroup_id: null,
-          code: null,
-          kg_weight: null,
-          unit_price: null,
-          unit_weight: null,
-          recipe_id: null,
-          product_type: 'materia_prima',
-          monday: false,
-          tuesday: false,
-          wednesday: false,
-          thursday: false,
-          friday: false,
-          saturday: false,
-          sunday: false,
-          all_days: false
-        }}
+        initialData={newProductInitialData}
+        forceProductType="materia_prima"
         onSubmit={handleCreateSubmit}
         onCancel={() => navigate(-1)} // Navigate back on cancel
         isLoading={loading}

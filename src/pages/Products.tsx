@@ -66,6 +66,8 @@ function Products() {
   const [open, setOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [productToDelete, setProductToDelete] = useState<Product | null>(null);
   const [groups, setGroups] = useState<Group[]>([]);
   const [subgroups, setSubgroups] = useState<Subgroup[]>([]);
   const [filteredSubgroups, setFilteredSubgroups] = useState<Subgroup[]>([]);
@@ -197,6 +199,30 @@ function Products() {
       toast.error("Erro ao atualizar produto. Verifique os dados ou o console.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDeleteProduct = (product: Product) => {
+    setProductToDelete(product);
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDeleteProduct = async () => {
+    if (!productToDelete || !activeCompany?.id) return;
+    setLoading(true);
+    try {
+      const success = await deleteProduct(productToDelete.id, activeCompany.id);
+      if (success) {
+        setProducts((prev) => prev.filter((p) => p.id !== productToDelete.id));
+        toast.success("Produto excluído com sucesso!");
+      }
+    } catch (error) {
+      toast.error("Erro ao excluir produto. Verifique o console.");
+      console.error('[Products] Erro ao excluir produto:', error);
+    } finally {
+      setLoading(false);
+      setDeleteDialogOpen(false);
+      setProductToDelete(null);
     }
   };
 
@@ -364,6 +390,7 @@ function Products() {
                             <DropdownMenuItem
                               className="text-red-500"
                               disabled={!!product.recipe_id}
+                              onClick={() => handleDeleteProduct(product)}
                             >
                               <Trash className="h-4 w-4 mr-2" />
                               Excluir
@@ -385,6 +412,27 @@ function Products() {
           </div>
         </Card>
       </div>
+
+      {/* Diálogo de confirmação de exclusão */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirmar Exclusão</DialogTitle>
+            <DialogDescription>
+              Tem certeza que deseja excluir o produto <b>{productToDelete?.name}</b>? Essa ação não pode ser desfeita.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={loading}>
+              Cancelar
+            </Button>
+            <Button variant="destructive" onClick={confirmDeleteProduct} disabled={loading}>
+              Excluir
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>

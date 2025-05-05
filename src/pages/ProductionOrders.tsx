@@ -43,16 +43,22 @@ export default function ProductionOrders() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<OrderStatus | null>(null);
   const [loading, setLoading] = useState(true);
-  const { activeCompany, loading: authLoading } = useAuth();
+  const { activeCompany, loading: authLoading, isSessionReady } = useAuth();
   
   const navigate = useNavigate();
   
   // Fetch production orders from the database
   useEffect(() => {
+    // Novo log detalhado
+    console.log('[ProductionOrders] useEffect check:', {
+      authLoading,
+      companyId: activeCompany?.id,
+      isSessionReady
+    });
     const loadData = async () => {
       setLoading(true);
       try {
-        if (authLoading || !activeCompany?.id) {
+        if (!isSessionReady || !activeCompany?.id) {
           toast.error('Empresa ativa não carregada. Tente novamente mais tarde.');
           setOrders([]);
           setLoading(false);
@@ -67,9 +73,8 @@ export default function ProductionOrders() {
         setLoading(false);
       }
     };
-    
     loadData();
-  }, [authLoading, activeCompany]);
+  }, [isSessionReady, activeCompany]);
   
   const filteredOrders = orders.filter(order => {
     const matchesSearch = 

@@ -14,7 +14,7 @@ import { parseDecimalBR } from '@/lib/numberUtils';
 // Type Imports
 import { Database } from '@/integrations/supabase/types';
 import { Group, Subgroup } from '@/services/groupService'; // Assuming these types exist and are correct
-import { Product as ProductTypeFromService, ProductType as ProductTypeCode } from '@/services/productService'; // Renamed to avoid conflict
+import { Product as ProductTypeFromService, ProductType } from '@/services/productService'; // Renamed to avoid conflict
 import { useNavigate, useParams } from "react-router-dom"; // Added useNavigate/useParams if used
 
 // Define Product type from Supabase schema - Use this if aligned with DB
@@ -22,7 +22,7 @@ type ProductSchema = Database['public']['Tables']['products']['Row'];
 
 // Define a interface para os dados do formulário, baseada na análise e correções
 // Use string para IDs de grupo/subgrupo para compatibilidade com Select
-type ProductFormData = {
+export interface ProductFormData {
   id?: string; // ID can be string (UUID)
   name: string;
   sku: string | null;
@@ -37,7 +37,7 @@ type ProductFormData = {
   unit_price: number | null;
   unit_weight: number | null;
   recipe_id: string | null; // Assuming recipe ID is UUID (string)
-  product_type: ProductTypeCode | null; // Use corrected type from productService
+  product_type: ProductType | null; // Use corrected type from productService
   ativo?: boolean;
   company_id: string | null; // Assuming company ID is UUID (string)
   // Campos de dias da semana (booleanos)
@@ -53,22 +53,22 @@ type ProductFormData = {
 };
 
 // Interface para os dados que serão enviados via onSubmit (convertendo IDs)
-type SubmissionData = Omit<ProductFormData, 'group_id' | 'subgroup_id' | 'company_id' | 'recipe_id'> & {
+export interface SubmissionData extends Omit<ProductFormData, 'group_id' | 'subgroup_id' | 'company_id' | 'recipe_id'> {
   group_id: string | null; // Keep as string if service expects string UUID
   subgroup_id: string | null; // Keep as string if service expects string UUID
   company_id: string; // Ensure it's not null for submission
   recipe_id: string | null;
 };
 
-
-interface ProductFormProps {
-  initialData?: ProductSchema | null; // Use schema type
+export interface ProductFormProps {
+  initialData?: Partial<ProductFormData> | null; // Allow partial for creation
   onSubmit: (data: SubmissionData) => Promise<void>; // Use SubmissionData type
   onCancel: () => void;
   isLoading: boolean;
   isEditMode: boolean;
   groups: Group[]; // Assume Group has { id: string; name: string; ... }
   subgroups: Subgroup[]; // Assume Subgroup has { id: string; name: string; group_id: string; ... }
+  forceProductType?: ProductType; // NOVO: força o tipo de produto (string para aceitar 'raw_material')
 }
 
 // Helper to safely convert value to number or keep null/undefined
@@ -96,7 +96,6 @@ const toBoolean = (value: any): boolean => {
     return false; // Default to false for other types
 };
 
-
 const ProductForm: React.FC<ProductFormProps> = ({
   initialData,
   onSubmit,
@@ -104,7 +103,8 @@ const ProductForm: React.FC<ProductFormProps> = ({
   isLoading,
   isEditMode,
   groups,
-  subgroups
+  subgroups,
+  forceProductType
 }) => {
 
   const { activeCompany } = useAuth();
@@ -148,7 +148,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
     unit_price: null,
     unit_weight: null,
     recipe_id: null, // string | null
-    product_type: null,
+    product_type: forceProductType ?? null, // Se forçado, já define aqui
     ativo: true,
     company_id: activeCompany?.id || null, // string | null
     monday: false,
@@ -178,6 +178,8 @@ const ProductForm: React.FC<ProductFormProps> = ({
 
   // Variável derivada para controlar se é produto de receita
   const isRecipeProduct = formData.recipe_id !== null;
+  // NOVO: Se o tipo for forçado, nunca pode ser editado
+  const isProductTypeForced = !!forceProductType;
 
   // Função auxiliar para verificar se um campo está bloqueado - Definida uma vez
   // Ajustada para desabilitar TUDO exceto os dias da semana E is_active
@@ -193,7 +195,6 @@ const ProductForm: React.FC<ProductFormProps> = ({
     // Disable if the field name is NOT in the editable list
     return !editableFieldsForRecipe.includes(fieldName);
   };
-
 
   // Efeito para calcular custo de matéria prima - Definido uma vez
   useEffect(() => {
@@ -241,7 +242,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
         unit_price: toNumberOrNull(safeInitialData.unit_price),
         unit_weight: toNumberOrNull(safeInitialData.unit_weight),
         recipe_id: safeInitialData.recipe_id?.toString() ?? null,
-        product_type: (safeInitialData.product_type as ProductTypeCode) || null, // Use corrected type
+        product_type: (safeInitialData.product_type as ProductType) || null, // Use corrected type
         ativo: toBoolean(safeInitialData.ativo ?? true), // Padronizado: só usa 'ativo', default true se ausente
         code: safeInitialData.code || null,
         // Weekdays
@@ -254,6 +255,11 @@ const ProductForm: React.FC<ProductFormProps> = ({
         sunday: toBoolean(safeInitialData.sunday),
         all_days: toBoolean(safeInitialData.all_days),
       };
+      // FORÇA 'Kg' SE FOR MATÉRIA PRIMA EM MODO DE EDIÇÃO
+      if (initialFormState.product_type === 'materia_prima') {
+        console.log('[DEBUG useEffect] Forçando unit para Kg em modo de edição.');
+        initialFormState.unit = 'Kg';
+      }
       setFormData(initialFormState);
 
       // Se for matéria prima em modo de edição, inicializa custoCalculado com o custo carregado do banco
@@ -277,6 +283,11 @@ const ProductForm: React.FC<ProductFormProps> = ({
       if (isNovoViaTelaProdutos) {
          defaultData.product_type = 'materia_prima';
          defaultData.unit = 'Kg';
+      }
+      // FORÇA 'Kg' SE FOR MATÉRIA PRIMA EM MODO DE CRIAÇÃO
+      if (defaultData.product_type === 'materia_prima') {
+        console.log('[DEBUG useEffect] Forçando unit para Kg em modo de criação.');
+        defaultData.unit = 'Kg';
       }
       setFormData(defaultData);
       setFilteredSubgroups(subgroups);
@@ -346,12 +357,12 @@ const ProductForm: React.FC<ProductFormProps> = ({
 
     // Value from Select is already string or null (if empty value option selected)
     // *** AJUSTE AQUI: Tratar '' OU 'none' como null ***
-    let processedValue: string | ProductTypeCode | null = (value === '' || value === 'none') ? null : value;
+    let processedValue: string | ProductType | null = (value === '' || value === 'none') ? null : value;
 
     // Handle product_type specifically if it's a select
      if (key === 'product_type') {
        // Ensure it's one of the allowed types or null
-       if (processedValue !== 'materia_prima' && processedValue !== 'receita' && processedValue !== 'subreceita') {
+       if (processedValue !== 'materia_prima' && processedValue !== 'subreceita' && processedValue !== 'receita') {
          processedValue = null;
        }
      }
@@ -402,6 +413,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
 
   // Validação do Formulário - Definida uma vez
   const validateForm = (): boolean => {
+  console.log('[DEBUG validateForm] Iniciando validação. Dados:', JSON.stringify(formData));
     console.log('[DEBUG] Validating formData:', formData);
     const newErrors: Partial<Record<keyof ProductFormData, string>> = {};
 
@@ -452,10 +464,12 @@ const ProductForm: React.FC<ProductFormProps> = ({
     checkField('min_stock', () => (formData.min_stock !== null && formData.min_stock < 0) ? 'Estoque mínimo não pode ser negativo.' : null);
 
 
+    console.log('[DEBUG validateForm] Objeto newErrors calculado:', JSON.stringify(newErrors));
     setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    const isValidResult = Object.keys(newErrors).length === 0;
+    console.log('[DEBUG validateForm] newErrors final:', JSON.stringify(newErrors), 'Retornando isValid:', isValidResult);
+    return isValidResult;
   };
-
 
   // Checagem de nomes semelhantes - Definida uma vez
   const checkSimilarNamesAndExact = useCallback(async (name: string) => {
@@ -503,7 +517,6 @@ const ProductForm: React.FC<ProductFormProps> = ({
         if (errors.name === 'Já existe um produto com este nome.') setErrors(prev => { delete prev.name; return {...prev}; });
     }
   }, [formData.name, checkSimilarNamesAndExact, isFieldDisabled, errors.name]); // Added dependencies
-
 
   // Função separada para a lógica de envio real
   const executeSubmit = async (companyId: string) => {
@@ -657,9 +670,17 @@ const ProductForm: React.FC<ProductFormProps> = ({
   const handleAllDaysChange = useCallback((checked: boolean | string) => {
        if (isFieldDisabled('all_days')) return; // Safe check
        const isChecked = toBoolean(checked);
-       const updatedDays: Partial<ProductFormData> = { all_days: isChecked };
-       weekdays.forEach(day => { updatedDays[day.key] = isChecked; });
-       setFormData(prev => ({ ...prev, ...updatedDays }));
+       setFormData(prev => ({
+         ...prev,
+         all_days: isChecked,
+         monday: isChecked,
+         tuesday: isChecked,
+         wednesday: isChecked,
+         thursday: isChecked,
+         friday: isChecked,
+         saturday: isChecked,
+         sunday: isChecked,
+       }));
         if (errors.monday) {
              setErrors(prev => { delete prev.monday; return {...prev}; });
         }
@@ -701,6 +722,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
           {/* --- Form Fields --- */}
           {/* Row 1: Name, Type */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Coluna 1: Nome */}
             <div>
               <Label htmlFor="name">Nome do Produto *</Label>
               <Input
@@ -713,33 +735,41 @@ const ProductForm: React.FC<ProductFormProps> = ({
               {isFieldDisabled('name') && disabledFieldMessage}
               {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name}</p>}
             </div>
+
+            {/* Coluna 2: Tipo */}
             <div>
                <Label htmlFor="product_type">Tipo *</Label>
-               <Select
-                 value={formData.product_type ?? ''}
-                 onValueChange={(value) => handleSelectChange('product_type', value as ProductTypeCode | null)}
-                 disabled={isFieldDisabled('product_type') || isEditMode || isLoading} // Cannot change type after creation
-               >
-                 <SelectTrigger
-                     id="product_type"
-                     className={errors.product_type ? 'border-red-500' : ''}
-                     style={isFieldDisabled('product_type') || isEditMode ? disabledFieldStyle : undefined}
-                     disabled={isFieldDisabled('product_type') || isEditMode || isLoading}
+               {!isProductTypeForced ? (
+                <Select
+                  value={formData.product_type ?? ''}
+                  onValueChange={(value) => handleSelectChange('product_type', value as ProductType | null)}
+                  disabled={isFieldDisabled('product_type') || isEditMode || isLoading}
+                >
+                  <SelectTrigger
+                    id="product_type"
+                    className={errors.product_type ? 'border-red-500' : ''}
+                    style={isFieldDisabled('product_type') ? disabledFieldStyle : undefined}
+                    disabled={isFieldDisabled('product_type') || isEditMode || isLoading}
                   >
-                   <SelectValue placeholder="Selecione o tipo" />
-                 </SelectTrigger>
-                 <SelectContent>
-                   <SelectItem value="materia_prima">Matéria Prima</SelectItem>
-                   <SelectItem value="subreceita">SubReceita</SelectItem>
-                   <SelectItem value="receita">Receita</SelectItem>
-                 </SelectContent>
-               </Select>
+                    <SelectValue placeholder="Selecione o tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="materia_prima">Matéria-prima</SelectItem>
+                    <SelectItem value="subreceita">Sub-receita</SelectItem>
+                    <SelectItem value="receita">Receita</SelectItem>
+                  </SelectContent>
+                </Select>
+               ) : (
+                 <>
+                   <Input value={forceProductType === 'materia_prima' ? 'Matéria-prima' : forceProductType === 'subreceita' ? 'Sub-receita' : 'Receita'} disabled readOnly />
+                   <p className="text-xs text-gray-500 mt-1">Tipo fixo neste fluxo</p>
+                 </>
+               )}
                {isFieldDisabled('product_type') && disabledFieldMessage}
                {isEditMode && !isFieldDisabled('product_type') && <p className="text-xs text-gray-500 mt-1">O tipo não pode ser alterado após cadastro.</p>}
-                {errors.product_type && <p className="text-red-500 text-xs mt-1">{errors.product_type}</p>}
-             </div>
+               {errors.product_type && <p className="text-red-500 text-xs mt-1">{errors.product_type}</p>}
+            </div>
           </div>
-
            {/* Fields specific for Matéria Prima */}
             {formData.product_type === 'materia_prima' && !isRecipeProduct && (
                <Card className="bg-gray-50 p-4 mt-4">
@@ -764,149 +794,183 @@ const ProductForm: React.FC<ProductFormProps> = ({
                </Card>
            )}
 
-          {/* Row 2: Group, Subgroup */}
-           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-             <div>
-               <Label htmlFor="group_id">Grupo</Label>
-               <Select value={formData.group_id ?? ''} onValueChange={(value) => handleSelectChange('group_id', value)} disabled={isFieldDisabled('group_id') || isLoading}>
-                 <SelectTrigger id="group_id" className={errors.group_id ? 'border-red-500' : ''} style={isFieldDisabled('group_id') ? disabledFieldStyle : undefined} disabled={isFieldDisabled('group_id') || isLoading}>
-                   <SelectValue placeholder="Selecione o grupo" />
-                 </SelectTrigger>
-                 <SelectContent>
-                   <SelectItem value="none">Nenhum</SelectItem>
-                   {groups?.map((group) => ( <SelectItem key={group.id} value={group.id.toString()}> {group.name} </SelectItem> ))}
-                 </SelectContent>
-               </Select>
-                {isFieldDisabled('group_id') && disabledFieldMessage}
-                {errors.group_id && <p className="text-red-500 text-xs mt-1">{errors.group_id}</p>}
-             </div>
-             <div>
-               <Label htmlFor="subgroup_id">Subgrupo</Label>
-               <Select value={formData.subgroup_id ?? ''} onValueChange={(value) => handleSelectChange('subgroup_id', value)} disabled={isSubgroupDisabled || isLoading}>
-                 <SelectTrigger id="subgroup_id" className={errors.subgroup_id ? 'border-red-500' : ''} style={isSubgroupDisabled ? disabledFieldStyle : undefined} disabled={isSubgroupDisabled || isLoading}>
-                   <SelectValue placeholder={!formData.group_id ? "Selecione um grupo" : "Selecione o subgrupo"} />
-                 </SelectTrigger>
-                 <SelectContent>
-                   <SelectItem value="none">Nenhum</SelectItem>
-                   {filteredSubgroups?.map((subgroup) => ( <SelectItem key={subgroup.id} value={subgroup.id.toString()}> {subgroup.name} </SelectItem> ))}
-                 </SelectContent>
-               </Select>
-                {isFieldDisabled('subgroup_id') && disabledFieldMessage}
-                {errors.subgroup_id && <p className="text-red-500 text-xs mt-1">{errors.subgroup_id}</p>}
-             </div>
-           </div>
-
-          {/* Row 3: Unit, Cost (if not MP), Price */}
-           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <Label htmlFor="unit">Unidade de Venda *</Label>
-                <Select name="unit" value={formData.unit ?? ''} onValueChange={(value) => handleSelectChange('unit', value as 'UN' | 'KG' | null)} disabled={isFieldDisabled('unit') || isLoading}>
-                  <SelectTrigger id="unit" className={errors.unit ? 'border-red-500' : ''} style={isFieldDisabled('unit') ? disabledFieldStyle : undefined} disabled={isFieldDisabled('unit') || isLoading}>
-                    <SelectValue placeholder="Selecione" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="UN">Unidade (UN)</SelectItem>
-                    <SelectItem value="Kg">Quilograma (Kg)</SelectItem>
-                  </SelectContent>
-                </Select>
-                {isFieldDisabled('unit') && disabledFieldMessage}
-                {errors.unit && <p className="text-red-500 text-xs mt-1">{errors.unit}</p>}
+          {(formData.product_type !== 'materia_prima') && (
+            <>
+              {/* Row 2: Group, Subgroup */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="group_id">Grupo</Label>
+                  <Select value={formData.group_id ?? ''} onValueChange={(value) => handleSelectChange('group_id', value)} disabled={isFieldDisabled('group_id') || isLoading}>
+                    <SelectTrigger id="group_id" className={errors.group_id ? 'border-red-500' : ''} style={isFieldDisabled('group_id') ? disabledFieldStyle : undefined} disabled={isFieldDisabled('group_id') || isLoading}>
+                      <SelectValue placeholder="Selecione o grupo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Nenhum</SelectItem>
+                      {groups?.map((group) => ( <SelectItem key={group.id} value={group.id.toString()}> {group.name} </SelectItem> ))}
+                    </SelectContent>
+                  </Select>
+                  {isFieldDisabled('group_id') && disabledFieldMessage}
+                  {errors.group_id && <p className="text-red-500 text-xs mt-1">{errors.group_id}</p>}
+                </div>
+                <div>
+                  <Label htmlFor="subgroup_id">Subgrupo</Label>
+                  <Select value={formData.subgroup_id ?? ''} onValueChange={(value) => handleSelectChange('subgroup_id', value)} disabled={isSubgroupDisabled || isLoading}>
+                    <SelectTrigger id="subgroup_id" className={errors.subgroup_id ? 'border-red-500' : ''} style={isSubgroupDisabled ? disabledFieldStyle : undefined} disabled={isSubgroupDisabled || isLoading}>
+                      <SelectValue placeholder={!formData.group_id ? "Selecione um grupo" : "Selecione o subgrupo"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Nenhum</SelectItem>
+                      {filteredSubgroups?.map((subgroup) => ( <SelectItem key={subgroup.id} value={subgroup.id.toString()}> {subgroup.name} </SelectItem> ))}
+                    </SelectContent>
+                  </Select>
+                  {isFieldDisabled('subgroup_id') && disabledFieldMessage}
+                  {errors.subgroup_id && <p className="text-red-500 text-xs mt-1">{errors.subgroup_id}</p>}
+                </div>
               </div>
 
-              { formData.product_type !== 'materia_prima' && (
-                 <div>
-                    <Label htmlFor="cost">Custo *</Label>
-                    <Input id="cost" name="cost" type="text" inputMode='decimal' value={formData.cost ?? ''} onChange={handleChange} placeholder='Ex: 2.50' className={errors.cost ? 'border-red-500' : ''} disabled={isFieldDisabled('cost') || isLoading} style={isFieldDisabled('cost') ? disabledFieldStyle : undefined} />
-                     {isFieldDisabled('cost') && disabledFieldMessage}
-                     {errors.cost && <p className="text-red-500 text-xs mt-1">{errors.cost}</p>}
-                  </div>
-             )}
+              {/* Row 3: Unit, Cost (if not MP), Price */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <Label htmlFor="unit">Unidade de Venda *</Label>
+                  <Select name="unit" value={formData.unit ?? ''} onValueChange={(value) => handleSelectChange('unit', value as 'UN' | 'KG' | null)} disabled={isFieldDisabled('unit') || isLoading}>
+                    <SelectTrigger id="unit" className={errors.unit ? 'border-red-500' : ''} style={isFieldDisabled('unit') ? disabledFieldStyle : undefined} disabled={isFieldDisabled('unit') || isLoading}>
+                      <SelectValue placeholder="Selecione" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="UN">Unidade (UN)</SelectItem>
+                      <SelectItem value="Kg">Quilograma (Kg)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {isFieldDisabled('unit') && disabledFieldMessage}
+                  {errors.unit && <p className="text-red-500 text-xs mt-1">{errors.unit}</p>}
+                </div>
 
-             {formData.unit === 'UN' && (
-                  <div>
-                    <Label htmlFor="unit_price">Preço Venda (UN)</Label>
-                    <Input id="unit_price" name="unit_price" type="text" inputMode='decimal' value={formData.unit_price ?? ''} onChange={handleChange} placeholder='Ex: 5.99' className={errors.unit_price ? 'border-red-500' : ''} disabled={isFieldDisabled('unit_price') || isLoading} style={isFieldDisabled('unit_price') ? disabledFieldStyle : undefined} />
-                     {isFieldDisabled('unit_price') && disabledFieldMessage}
-                     {errors.unit_price && <p className="text-red-500 text-xs mt-1">{errors.unit_price}</p>}
-                  </div>
-              )}
-           </div>
+                <div>
+                  <Label htmlFor="cost">Custo *</Label>
+                  <Input id="cost" name="cost" type="text" inputMode='decimal' value={formData.cost ?? ''} onChange={handleChange} placeholder='Ex: 2.50' className={errors.cost ? 'border-red-500' : ''} disabled={isFieldDisabled('cost') || isLoading} style={isFieldDisabled('cost') ? disabledFieldStyle : undefined} />
+                  {isFieldDisabled('cost') && disabledFieldMessage}
+                  {errors.cost && <p className="text-red-500 text-xs mt-1">{errors.cost}</p>}
+                </div>
 
-          {/* Row 4: Weights, SKU, Supplier */}
-           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {formData.unit === 'UN' && (
-                  <div>
-                    <Label htmlFor="unit_weight">Peso por Unidade (Kg) *</Label>
-                    <Input id="unit_weight" name="unit_weight" type="text" inputMode='decimal' value={formData.unit_weight ?? ''} onChange={handleChange} placeholder='Ex: 0.550' className={errors.unit_weight ? 'border-red-500' : ''} disabled={isFieldDisabled('unit_weight') || isLoading} style={isFieldDisabled('unit_weight') ? disabledFieldStyle : undefined} />
-                     {isFieldDisabled('unit_weight') && disabledFieldMessage}
-                     {errors.unit_weight && <p className="text-red-500 text-xs mt-1">{errors.unit_weight}</p>}
-                  </div>
-              )}
-             {formData.unit === 'Kg' && formData.product_type !== 'materia_prima' && (
-                  <div>
-                    <Label htmlFor="kg_weight">Peso Total Receita (Kg)</Label> {/* Clarified Label */}
-                    <Input id="kg_weight" name="kg_weight" type="text" inputMode='decimal' value={formData.kg_weight ?? ''} onChange={handleChange} placeholder='Ex: 2.750' className={errors.kg_weight ? 'border-red-500' : ''} disabled={isFieldDisabled('kg_weight') || isLoading} style={isFieldDisabled('kg_weight') ? disabledFieldStyle : undefined} />
-                      {isFieldDisabled('kg_weight') && disabledFieldMessage}
-                      {errors.kg_weight && <p className="text-red-500 text-xs mt-1">{errors.kg_weight}</p>}
-                  </div>
-             )}
-              <div>
-                 <Label htmlFor="sku">SKU</Label>
+                <div>
+                  <Label htmlFor="unit_price">Preço Venda ({formData.unit || 'UN'})</Label>
+                  <Input id="unit_price" name="unit_price" type="text" inputMode='decimal' value={formData.unit_price ?? ''} onChange={handleChange} placeholder='Ex: 5.99' className={errors.unit_price ? 'border-red-500' : ''} disabled={isFieldDisabled('unit_price') || isLoading} style={isFieldDisabled('unit_price') ? disabledFieldStyle : undefined} />
+                  {isFieldDisabled('unit_price') && disabledFieldMessage}
+                  {errors.unit_price && <p className="text-red-500 text-xs mt-1">{errors.unit_price}</p>}
+                </div>
+              </div>
+
+              {/* Row 4: Weights, SKU, Supplier */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <Label htmlFor="unit_weight">Peso por Unidade (Kg) *</Label>
+                  <Input id="unit_weight" name="unit_weight" type="text" inputMode='decimal' value={formData.unit_weight ?? ''} onChange={handleChange} placeholder='Ex: 0.550' className={errors.unit_weight ? 'border-red-500' : ''} disabled={isFieldDisabled('unit_weight') || isLoading} style={isFieldDisabled('unit_weight') ? disabledFieldStyle : undefined} />
+                  {isFieldDisabled('unit_weight') && disabledFieldMessage}
+                  {errors.unit_weight && <p className="text-red-500 text-xs mt-1">{errors.unit_weight}</p>}
+                </div>
+
+                <div>
+                  <Label htmlFor="sku">SKU</Label>
                   <Input id="sku" name="sku" value={formData.sku ?? ''} onChange={handleChange} disabled={isFieldDisabled('sku') || isLoading} style={isFieldDisabled('sku') ? disabledFieldStyle : undefined} maxLength={50} />
-                   {isFieldDisabled('sku') && disabledFieldMessage}
-              </div>
-              <div>
-                 <Label htmlFor="supplier">Fornecedor</Label>
-                  <Input id="supplier" name="supplier" value={formData.supplier ?? ''} onChange={handleChange} disabled={isFieldDisabled('supplier') || isLoading} style={isFieldDisabled('supplier') ? disabledFieldStyle : undefined} maxLength={100} />
-                   {isFieldDisabled('supplier') && disabledFieldMessage}
-              </div>
-           </div>
+                  {isFieldDisabled('sku') && disabledFieldMessage}
+                </div>
 
-           {/* Row 5: Stock Levels */}
-           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-             <div>
-                <Label htmlFor="min_stock">Estoque Mínimo ({formData.unit || 'Unid.'})</Label>
-                 <Input id="min_stock" name="min_stock" type="number" step="0.001" min="0" value={formData.min_stock ?? ''} onChange={handleChange} disabled={isFieldDisabled('min_stock') || isLoading} style={isFieldDisabled('min_stock') ? disabledFieldStyle : undefined} />
+                <div>
+                  <Label htmlFor="supplier">Fornecedor</Label>
+                  <Input id="supplier" name="supplier" value={formData.supplier ?? ''} onChange={handleChange} disabled={isFieldDisabled('supplier') || isLoading} style={isFieldDisabled('supplier') ? disabledFieldStyle : undefined} maxLength={100} />
+                  {isFieldDisabled('supplier') && disabledFieldMessage}
+                </div>
+              </div>
+
+              {/* Row 5: Stock Levels */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <Label htmlFor="min_stock">Estoque Mínimo ({formData.unit || 'Unid.'})</Label>
+                  <Input id="min_stock" name="min_stock" type="number" step="0.001" min="0" value={formData.min_stock ?? ''} onChange={handleChange} disabled={isFieldDisabled('min_stock') || isLoading} style={isFieldDisabled('min_stock') ? disabledFieldStyle : undefined} />
                   {isFieldDisabled('min_stock') && disabledFieldMessage}
                   {errors.min_stock && <p className="text-red-500 text-xs mt-1">{errors.min_stock}</p>}
-             </div>
-              <div>
-                <Label htmlFor="current_stock">Estoque Atual ({formData.unit || 'Unid.'})</Label>
-                 <Input id="current_stock" name="current_stock" type="number" step="0.001" value={formData.current_stock ?? ''} onChange={handleChange} disabled={isFieldDisabled('current_stock') || isLoading} style={isFieldDisabled('current_stock') ? disabledFieldStyle : undefined} />
+                </div>
+
+                <div>
+                  <Label htmlFor="current_stock">Estoque Atual ({formData.unit || 'Unid.'})</Label>
+                  <Input id="current_stock" name="current_stock" type="number" step="0.001" value={formData.current_stock ?? ''} onChange={handleChange} disabled={isFieldDisabled('current_stock') || isLoading} style={isFieldDisabled('current_stock') ? disabledFieldStyle : undefined} />
                   {isFieldDisabled('current_stock') && disabledFieldMessage}
                   {errors.current_stock && <p className="text-red-500 text-xs mt-1">{errors.current_stock}</p>}
-              </div>
-               <div>
+                </div>
+
+                <div>
                   <Label htmlFor="ativo">Produto Ativo?</Label>
                   <div className="flex items-center pt-2">
-                     <Checkbox id="ativo" name="ativo" checked={formData.ativo} onCheckedChange={(checked) => handleSelectChange('ativo', checked ? 'true' : 'false')} disabled={isFieldDisabled('ativo') || isLoading} style={isFieldDisabled('ativo') ? disabledFieldStyle : undefined} />
-                     <Label htmlFor="ativo" className="ml-2">Sim</Label>
-                 </div>
+                    <Checkbox id="ativo" name="ativo" checked={formData.ativo} onCheckedChange={(checked) => handleSelectChange('ativo', checked ? 'true' : 'false')} disabled={isFieldDisabled('ativo') || isLoading} style={isFieldDisabled('ativo') ? disabledFieldStyle : undefined} />
+                    <Label htmlFor="ativo" className="ml-2">Sim</Label>
+                  </div>
                   {isFieldDisabled('ativo') && disabledFieldMessage}
+                </div>
               </div>
-           </div>
 
+              {/* Row 6: Production Days */}
+              <div className="space-y-2 pt-4">
+                <Label className={errors.monday ? 'text-red-500' : ''}>Dias de Produção</Label>
+                <div className={`flex flex-wrap gap-x-6 gap-y-2 items-center p-3 border rounded-md ${errors.monday ? 'border-red-500' : ''}`}>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox id="all_days" checked={allWeekdaysChecked} onCheckedChange={handleAllDaysChange} disabled={isLoading} />
+                    <Label htmlFor="all_days" className="font-medium">Todos os dias</Label>
+                  </div>
+                  <div className="flex flex-wrap gap-x-4 gap-y-2">
+                    {weekdays.map((day) => (
+                      <div key={day.key} className="flex items-center space-x-2">
+                        <Checkbox id={day.key} checked={toBoolean(formData[day.key])} onCheckedChange={(checked) => handleWeekdayChange(day.key, checked as boolean)} disabled={isLoading} />
+                        <Label htmlFor={day.key}>{day.label}</Label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                {errors.monday && <p className="text-red-500 text-xs mt-1">{errors.monday}</p>}
+              </div>
+            </>
+          )}
 
-           {/* Row 6: Production Days */}
-           <div className="space-y-2 pt-4">
-             <Label className={errors.monday ? 'text-red-500' : ''}>Dias de Produção</Label>
-             <div className={`flex flex-wrap gap-x-6 gap-y-2 items-center p-3 border rounded-md ${errors.monday ? 'border-red-500' : ''}`}>
-               <div className="flex items-center space-x-2">
-                 <Checkbox id="all_days" checked={allWeekdaysChecked} onCheckedChange={handleAllDaysChange} disabled={isLoading || formData.product_type === 'materia_prima'} />
-                 <Label htmlFor="all_days" className="font-medium">Todos os dias</Label>
-               </div>
-               <div className="flex flex-wrap gap-x-4 gap-y-2">
-                 {weekdays.map((day) => (
-                   <div key={day.key} className="flex items-center space-x-2">
-                     <Checkbox id={day.key} checked={toBoolean(formData[day.key])} onCheckedChange={(checked) => handleWeekdayChange(day.key, checked as boolean)} disabled={isLoading || formData.product_type === 'materia_prima'} />
-                     <Label htmlFor={day.key}>{day.label}</Label>
-                   </div>
-                 ))}
-               </div>
-             </div>
-              {errors.monday && <p className="text-red-500 text-xs mt-1">{errors.monday}</p>}
-           </div>
+          {/* Grupo e Subgrupo */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="group_id">Grupo</Label>
+              <Select value={formData.group_id ?? ''} onValueChange={(value) => handleSelectChange('group_id', value)} disabled={isFieldDisabled('group_id') || isLoading}>
+                <SelectTrigger id="group_id" className={errors.group_id ? 'border-red-500' : ''} style={isFieldDisabled('group_id') ? disabledFieldStyle : undefined} disabled={isFieldDisabled('group_id') || isLoading}>
+                  <SelectValue placeholder="Selecione o grupo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Nenhum</SelectItem>
+                  {groups?.map((group) => (
+                    <SelectItem key={group.id} value={group.id.toString()}>{group.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {isFieldDisabled('group_id') && disabledFieldMessage}
+              {errors.group_id && <p className="text-red-500 text-xs mt-1">{errors.group_id}</p>}
+            </div>
+            <div>
+              <Label htmlFor="subgroup_id">Subgrupo</Label>
+              <Select value={formData.subgroup_id ?? ''} onValueChange={(value) => handleSelectChange('subgroup_id', value)} disabled={isSubgroupDisabled || isLoading}>
+                <SelectTrigger id="subgroup_id" className={errors.subgroup_id ? 'border-red-500' : ''} style={isSubgroupDisabled ? disabledFieldStyle : undefined} disabled={isSubgroupDisabled || isLoading}>
+                  <SelectValue placeholder={!formData.group_id ? "Selecione um grupo" : "Selecione o subgrupo"} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Nenhum</SelectItem>
+                  {filteredSubgroups?.map((subgroup) => (
+                    <SelectItem key={subgroup.id} value={subgroup.id.toString()}>{subgroup.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {isFieldDisabled('subgroup_id') && disabledFieldMessage}
+              {errors.subgroup_id && <p className="text-red-500 text-xs mt-1">{errors.subgroup_id}</p>}
+            </div>
+          </div>
 
+          {/* Produto Ativo */}
+          <div className="flex items-center space-x-2 mt-4">
+            <Checkbox id="ativo" name="ativo" checked={formData.ativo} onCheckedChange={(checked) => handleSelectChange('ativo', checked ? 'true' : 'false')} disabled={isFieldDisabled('ativo') || isLoading} style={isFieldDisabled('ativo') ? disabledFieldStyle : undefined} />
+            <Label htmlFor="ativo">Produto Ativo?</Label>
+          </div>
 
           {/* Action Buttons */}
           <div className="flex justify-end space-x-2 pt-6">

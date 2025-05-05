@@ -6,6 +6,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,6 +41,9 @@ const GroupDialog: React.FC<GroupDialogProps> = ({
           <DialogTitle>
             {groupForm.id ? 'Editar Grupo' : 'Novo Grupo'}
           </DialogTitle>
+          <DialogDescription id="group-dialog-description">
+            Preencha os dados do grupo abaixo. Os campos marcados com * são obrigatórios.
+          </DialogDescription>
         </DialogHeader>
         
         <div className="py-4 space-y-4">

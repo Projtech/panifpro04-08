@@ -557,18 +557,54 @@ export async function updateRecipe(
 export async function deleteRecipe(id: string, companyId: string): Promise<boolean> {
   if (!companyId) throw new Error('[deleteRecipe] companyId é obrigatório');
   try {
-    const { error } = await supabase
+    // Buscar todos os produtos associados à receita
+    const { data: products, error: fetchProductsError } = await supabase
+      .from('products')
+      .select('id')
+      .eq('recipe_id', id)
+      .eq('company_id', companyId);
+
+    if (fetchProductsError) throw fetchProductsError;
+
+    // Deletar todos os production_list_items desses produtos
+    if (products && products.length > 0) {
+      const productIds = products.map((p: { id: string }) => p.id);
+      const { error: prodListItemsError } = await supabase
+        .from('production_list_items')
+        .delete()
+        .in('product_id', productIds);
+      if (prodListItemsError) throw prodListItemsError;
+    }
+
+    // Agora deletar os produtos associados à receita
+    const { error: productsError } = await supabase
+      .from('products')
+      .delete()
+      .eq('recipe_id', id)
+      .eq('company_id', companyId);
+    if (productsError) throw productsError;
+
+    // Depois deletar os ingredientes da receita
+    const { error: ingredientsError } = await supabase
+      .from('recipe_ingredients')
+      .delete()
+      .eq('recipe_id', id)
+      .eq('company_id', companyId);
+    if (ingredientsError) throw ingredientsError;
+
+    // Finalmente deletar a receita
+    const { error: recipeError } = await supabase
       .from('recipes')
       .delete()
       .eq('id', id)
       .eq('company_id', companyId);
-    
-    if (error) throw error;
-    toast.success("Receita excluída com sucesso");
+    if (recipeError) throw recipeError;
+
+    toast.success("Receita e seus itens associados excluídos com sucesso");
     return true;
   } catch (error) {
     console.error("Error deleting recipe:", error);
-    toast.error("Erro ao excluir receita");
+    toast.error("Erro ao excluir receita e seus itens associados");
     return false;
   }
 }

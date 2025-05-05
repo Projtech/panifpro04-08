@@ -23,7 +23,7 @@ import TransactionHistoryTable from "@/components/Inventory/TransactionHistoryTa
 import TransactionForm from "@/components/Inventory/TransactionForm";
 
 export default function Inventory() {
-  const { activeCompany, loading: authLoading } = useAuth();
+  const { activeCompany, loading: authLoading, isSessionReady } = useAuth();
   const [loading, setLoading] = useState(false);
   const [inventory, setInventory] = useState<ProductInventory[]>([]);
   const [transactions, setTransactions] = useState<InventoryTransactionWithProduct[]>([]);
@@ -40,21 +40,13 @@ export default function Inventory() {
     }
     setLoading(true);
     try {
-      console.log("Fetching inventory data...");
-      
-      // Get current inventory
       const inventoryData = await getProductInventory(activeCompany.id);
-      console.log("Inventory data:", inventoryData);
       setInventory(inventoryData);
-      
-      // Get transaction history
+
       const transactionsData = await getInventoryTransactions(activeCompany.id);
-      console.log("Transaction data:", transactionsData);
       setTransactions(transactionsData);
-      
-      // Get products for dropdowns
-      const productsData = await getProducts();
-      console.log("Products data:", productsData);
+
+      const productsData = await getProducts(activeCompany.id);
       setProducts(productsData);
     } catch (error) {
       console.error("Error fetching inventory data:", error);
@@ -64,8 +56,16 @@ export default function Inventory() {
   };
   
   useEffect(() => {
+    // Só busca se autenticação estiver carregada e temos uma empresa ativa
+    if (authLoading || !activeCompany?.id) {
+      setInventory([]);
+      setTransactions([]);
+      setProducts([]);
+      setLoading(false);
+      return;
+    }
     fetchData();
-  }, []);
+  }, [authLoading, activeCompany?.id]);
 
   const handleTransactionComplete = async () => {
     setIsTransactionDialogOpen(false);

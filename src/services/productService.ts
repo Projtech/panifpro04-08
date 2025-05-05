@@ -432,6 +432,7 @@ export async function deleteProduct(id: string, companyId: string): Promise<bool
   }
   console.log(`[PRODUCTS] Deleting product with ID: ${id}`);
   try {
+    // Verifica se o produto está vinculado a inventory_transactions
     const { data: productionItems, error: productionError } = await supabase
       .from('inventory_transactions')
       .select('id')
@@ -447,6 +448,14 @@ export async function deleteProduct(id: string, companyId: string): Promise<bool
       return false;
     }
 
+    // Deleta todos os registros em production_list_items vinculados ao produto
+    const { error: prodListItemsError } = await supabase
+      .from('production_list_items')
+      .delete()
+      .eq('product_id', id);
+    if (prodListItemsError) throw prodListItemsError;
+
+    // Agora deleta o produto
     const { error } = await supabase
       .from('products')
       .delete()
