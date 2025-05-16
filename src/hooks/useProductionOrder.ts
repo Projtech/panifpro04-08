@@ -9,9 +9,46 @@ import {
   // updateProductionOrder, // REMOVER - Não existe no serviço
   ProductionOrderItem 
 } from "@/services/productionOrderService";
-import { getAllRecipeIngredients, getRecipes, Recipe } from "@/services/recipeService";
+import { getAllRecipeIngredients, getRecipes } from "@/services/recipeService";
 import { useAuth } from '@/contexts/AuthContext';
 import { MaterialItem } from "@/components/ProductionOrder/MaterialsCalculator";
+
+export interface Recipe {
+  id: string;
+  name: string;
+  code: string;
+  yield_kg: number;
+  yield_units: number;
+  instructions: string;
+  photo_url: string;
+  gif_url: string;
+  cost_per_kg: number;
+  cost_per_unit: number;
+  group_id: string;
+  subgroup_id: string;
+  all_days: boolean;
+  monday: boolean;
+  tuesday: boolean;
+  wednesday: boolean;
+  thursday: boolean;
+  friday: boolean;
+  saturday: boolean;
+  sunday: boolean;
+  subRecipes?: {
+    id: string;
+    name: string;
+    yield: number;
+    amount: number;
+    unit: string;
+  }[];
+  ingredients?: {
+    id: number;
+    name: string;
+    amount: number;
+    unit: string;
+    type: 'raw' | 'sub';
+  }[];
+}
 
 interface UseProductionOrderProps {
   id?: string;

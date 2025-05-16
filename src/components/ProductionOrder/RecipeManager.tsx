@@ -22,9 +22,10 @@ export interface OrderRecipe {
 interface RecipeManagerProps {
   recipes: Recipe[];
   orderRecipes: OrderRecipe[];
-  setOrderRecipes: (recipes: OrderRecipe[]) => void;
+  setOrderRecipes: React.Dispatch<React.SetStateAction<OrderRecipe[]>>;
   isViewOnly: boolean;
   onOpenMaterialsList: () => void;
+  onOpenPreWeighingList: () => void;
 }
 
 export default function RecipeManager({

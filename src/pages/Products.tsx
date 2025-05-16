@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,6 +38,7 @@ import {
   Tag,
   FolderTree,
   RefreshCw,
+  ArrowLeft,
 } from "lucide-react";
 import {
   Select,
@@ -56,6 +57,7 @@ import { formatCurrency, formatDecimal } from "@/lib/formatters";
 import { parseDecimalBR, formatInputDecimalBR } from "@/lib/numberUtils";
 import { EnhancedAutocomplete } from "@/components/ui/enhanced-autocomplete";
 import ProductForm from '@/components/ProductForm';
+import ErrorBoundary from '@/components/ErrorBoundary';
 
 function Products() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -72,6 +74,21 @@ function Products() {
   const [subgroups, setSubgroups] = useState<Subgroup[]>([]);
   const [filteredSubgroups, setFilteredSubgroups] = useState<Subgroup[]>([]);
   const navigate = useNavigate();
+  const location = useLocation();
+  
+  // Verificar se estamos vindo da tela de receitas
+  const [returnToRecipe, setReturnToRecipe] = useState<boolean>(false);
+  const [recipeId, setRecipeId] = useState<string | undefined>();
+  
+  // Verificar se há estado de retorno para a tela de receitas
+  useEffect(() => {
+    if (location.state && location.state.returnToRecipe) {
+      setReturnToRecipe(true);
+      if (location.state.recipeId) {
+        setRecipeId(location.state.recipeId);
+      }
+    }
+  }, [location]);
 
   const { activeCompany, loading: authLoading } = useAuth();
 
@@ -143,9 +160,15 @@ function Products() {
     fetchGroups();
     fetchSubgroups();
 
+    // Configurar intervalo de atualização automática
     refreshTimerRef.current = setInterval(() => {
       console.log("Atualizando produtos automaticamente...");
-      fetchProducts();
+      // Não atualizar se o diálogo de edição estiver aberto para evitar conflitos
+      if (!editOpen) {
+        fetchProducts();
+      } else {
+        console.log("Atualizacao automática pulada - diálogo de edição aberto");
+      }
     }, 5 * 60 * 1000);
 
     return () => {
@@ -153,7 +176,7 @@ function Products() {
         clearInterval(refreshTimerRef.current);
       }
     };
-  }, []);
+  }, [editOpen]); // Adicionar editOpen como dependência
 
   useEffect(() => {
     if (selectedProduct) {
@@ -261,6 +284,27 @@ function Products() {
               )}
               <span className="ml-2">Atualizar</span>
             </Button>
+            {returnToRecipe && (
+              <Button 
+                variant="outline" 
+                className="mr-2 bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-200"
+                onClick={() => {
+                  // Navegar de volta para a tela de receitas
+                  if (recipeId) {
+                    navigate(`/recipes/${recipeId}/edit`, { 
+                      state: { fromProductCreation: true } 
+                    });
+                  } else {
+                    navigate(`/recipes/new`, { 
+                      state: { fromProductCreation: true } 
+                    });
+                  }
+                }}
+              >
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Voltar para Receita
+              </Button>
+            )}
             <Button disabled={loading} onClick={() => navigate("/produtos/novo")}>
               <Plus className="h-4 w-4 mr-2" />
               Adicionar Produto
@@ -351,13 +395,13 @@ function Products() {
                           </Badge>
                         ) : (
                           <div className="flex flex-wrap gap-1">
-                            {product.monday && <Badge variant="secondary">Seg</Badge>}
-                            {product.tuesday && <Badge variant="secondary">Ter</Badge>}
-                            {product.wednesday && <Badge variant="secondary">Qua</Badge>}
-                            {product.thursday && <Badge variant="secondary">Qui</Badge>}
-                            {product.friday && <Badge variant="secondary">Sex</Badge>}
-                            {product.saturday && <Badge variant="secondary">Sáb</Badge>}
-                            {product.sunday && <Badge variant="secondary">Dom</Badge>}
+                            {product.monday && <Badge variant="secondary" translate="no">Seg</Badge>}
+                            {product.tuesday && <Badge variant="secondary" translate="no">Ter</Badge>}
+                            {product.wednesday && <Badge variant="secondary" translate="no">Qua</Badge>}
+                            {product.thursday && <Badge variant="secondary" translate="no">Qui</Badge>}
+                            {product.friday && <Badge variant="secondary" translate="no">Sex</Badge>}
+                            {product.saturday && <Badge variant="secondary" translate="no">Sáb</Badge>}
+                            {product.sunday && <Badge variant="secondary" translate="no">Dom</Badge>}
                             {!product.monday && !product.tuesday && !product.wednesday &&
                               !product.thursday && !product.friday && !product.saturday &&
                               !product.sunday && (
@@ -433,7 +477,26 @@ function Products() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+      <Dialog 
+        open={editOpen} 
+        onOpenChange={(open) => {
+          // Primeiro atualiza o estado do diálogo
+          setEditOpen(open);
+          
+          // Se estiver fechando o diálogo
+          if (!open) {
+            // Aumentando o timeout para dar mais tempo para operações pendentes finalizarem
+            // Timeout maior para garantir que todas as animações e operações do DOM terminem
+            setTimeout(() => {
+              // Verificar se o diálogo ainda está fechado antes de limpar
+              if (!editOpen) {
+                setSelectedProduct(null);
+                console.log('[Products] Limpando selectedProduct após fechar diálogo');
+              }
+            }, 500);
+          }
+        }}
+      >
         <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
             <DialogTitle>
@@ -445,21 +508,34 @@ function Products() {
                 </Badge>
               )}
             </DialogTitle>
+            <DialogDescription>
+              {selectedProduct?.recipe_id 
+                ? "Edite as propriedades do produto vinculado à receita" 
+                : "Edite as propriedades do produto"}
+            </DialogDescription>
           </DialogHeader>
-          {selectedProduct && (
-            <ProductForm
-              key={selectedProduct.id}
-              initialData={selectedProduct}
-              onSubmit={handleEditSubmit}
-              onCancel={() => {
-                setEditOpen(false);
-                setSelectedProduct(null);
-              }}
-              isLoading={loading}
-              groups={groups}
-              subgroups={subgroups}
-              isEditMode={true}
-            />
+          {selectedProduct && editOpen && (
+            <ErrorBoundary 
+              fallback={<div className="p-4 text-red-500">Erro ao renderizar o formulário de produto</div>}
+              onError={(error) => console.error("[ErrorBoundary] Erro capturado no ProductForm:", error)}
+            >
+              <div className="product-form-container">
+                <ProductForm
+                  key={`edit-${selectedProduct.id}-${Date.now()}`} // Garantir nova instância a cada abertura
+                  initialData={selectedProduct}
+                  onSubmit={handleEditSubmit}
+                  onCancel={() => {
+                    // Primeiro fechar o diálogo
+                    setEditOpen(false);
+                    // Não limpe selectedProduct aqui, deixe o onOpenChange cuidar disso
+                  }}
+                  isLoading={loading}
+                  groups={groups}
+                  subgroups={subgroups}
+                  isEditMode={true}
+                />
+              </div>
+            </ErrorBoundary>
           )}
           {/* Ao criar novo produto, a navegação já leva para /produtos/novo, que agora garante product_type correto no ProductForm */}
         </DialogContent>

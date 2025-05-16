@@ -215,7 +215,7 @@ export default function Recipes() {
       await updateAllRecipesCosts(activeCompany.id);
       // Refresh the recipes list to show updated costs
       await fetchRecipes();
-      toast.success("Custos de todas as receitas atualizados com sucesso");
+      toast.success("Precificação de todas as receitas atualizada com sucesso");
     } catch (error) {
       console.error("Error updating recipe costs:", error);
       toast.error("Erro ao atualizar custos das receitas");
@@ -243,7 +243,7 @@ export default function Recipes() {
             ) : (
               <RefreshCw className="mr-2 h-4 w-4" />
             )}
-            Atualizar Custos das Receitas
+            Atualizar Precificação das Receitas
           </Button>
           
           <Button 
@@ -479,7 +479,7 @@ export default function Recipes() {
                 disabled={loading}
               >
                 <FileText className="mr-2 h-4 w-4" />
-                Matérias Primas + Custos Associados
+                Matérias Primas + Precificação
               </Button>
             </div>
           </div>

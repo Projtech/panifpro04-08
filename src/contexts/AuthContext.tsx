@@ -64,6 +64,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [activeCompany, setActiveCompanyState] = useState<ActiveCompanyData | null>(null);
   const [authError, setAuthError] = useState<string | null>(null); // Estado de erro
   const [needsPasswordChange, setNeedsPasswordChange] = useState<boolean>(false); // Estado para mudança de senha
+  
+  // Ref para controlar se o componente está montado
+  const isMounted = React.useRef(true);
 
   // const navigate = useNavigate(); // Hook de navegação - Removido pois não é usado diretamente aqui
 
@@ -84,12 +87,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // Função de signOut
   const signOut = useCallback(async () => {
     console.log('[AuthContext] Iniciando signOut...');
-    setAuthError(null); // Limpa erro ao deslogar
+    if (isMounted.current) {
+      setAuthError(null); // Limpa erro ao deslogar
+    }
     localStorage.removeItem('activeCompany'); // Remove empresa ativa do localStorage
-    setActiveCompanyState(null); // Limpa estado da empresa ativa
-    setUser(null); // Limpa usuário
-    setSession(null); // Limpa sessão
-    setLoading(false); // Garante que não fique carregando
+    if (isMounted.current) {
+      setActiveCompanyState(null); // Limpa estado da empresa ativa
+      setUser(null); // Limpa usuário
+      setSession(null); // Limpa sessão
+      setLoading(false); // Garante que não fique carregando
+    }
     try {
       await supabase.auth.signOut();
     } catch (error) {
@@ -105,8 +112,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     // Verifica o metadado que pode vir do Supabase Auth ou do seu backend
     const needsChange = currentUser?.user_metadata?.needs_password_change ?? false;
     console.log(`[AuthContext] checkPasswordChangeRequirement para user ${currentUser?.id}. Needs change: ${needsChange}`);
-    setNeedsPasswordChange(needsChange);
+    if (isMounted.current) {
+      setNeedsPasswordChange(needsChange);
+    }
     // Não faz redirecionamento aqui, deixa isso para a UI
+  }, []);
+
+  // Efeito para controlar o ciclo de vida do componente
+  useEffect(() => {
+    isMounted.current = true;
+    
+    return () => {
+      isMounted.current = false;
+    };
   }, []);
 
   // Efeito principal para lidar com o estado de autenticação
@@ -143,11 +161,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         'Session:', session ? { user: session.user ? { id: session.user.id, email: session.user.email, aud: session.user.aud } : null, expires_at: session.expires_at } : null // Log seguro
       );
 
+      // Verifica se o componente ainda está montado antes de atualizar o estado
+      if (!isMounted.current) return;
+      
       setSession(session);
       const currentUser = session?.user ?? null;
       setUser(currentUser);
       setAuthError(null); // Limpa erro a cada novo evento relevante
-      setLoading(true); // Define loading como true no início do processamento do evento
 
       // Lógica principal baseada no usuário da sessão
       if (currentUser) {
@@ -163,8 +183,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         if (initialCompanyFromStorage && initialCompanyFromStorage.user_id === currentUser.id) {
           console.log(`[AuthContext Listener #${listenerInstanceId} Event #${eventInstanceId}] Empresa do localStorage (${initialCompanyFromStorage.id}) pertence ao usuário atual. Usando-a.`);
           companyToUse = initialCompanyFromStorage;
-          setActiveCompanyState(companyToUse); // Define o estado com a empresa do storage
-          setLoading(false); // Já temos a empresa, podemos parar de carregar
+          // Verifica se o componente ainda está montado antes de atualizar o estado
+          if (isMounted.current) {
+            setActiveCompanyState(companyToUse); // Define o estado com a empresa do storage
+            setLoading(false); // Já temos a empresa, podemos parar de carregar
+          }
         } else {
           if (initialCompanyFromStorage) {
             console.log(`[AuthContext Listener #${listenerInstanceId} Event #${eventInstanceId}] Empresa do localStorage (${initialCompanyFromStorage.id}) NÃO pertence ao usuário atual (${currentUser.id}). Ignorando e buscando do DB.`);
@@ -182,6 +205,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               .from('company_users')
               .select('role, company:company_id(id, name)') // Ajuste os campos conforme necessário
               .eq('user_id', currentUser.id)
+              .eq('status', 'active') // Filtra por associações ativas
               .limit(1)
               .maybeSingle();
 
@@ -196,7 +220,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               console.error(
                 `[AuthContext Listener #${listenerInstanceId} Event #${eventInstanceId}] Erro ao buscar empresa/role:`, companyError
               );
-              setAuthError('Erro ao buscar dados da empresa vinculada. Tente novamente mais tarde.');
+              if (isMounted.current) {
+                setAuthError('Erro ao buscar dados da empresa vinculada. Tente novamente mais tarde.');
+              }
               finalCompanyData = null;
             } else if (companyUserData?.company && companyUserData?.role) {
               finalCompanyData = {
@@ -208,27 +234,35 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               console.log(
                 `[AuthContext Listener #${listenerInstanceId} Event #${eventInstanceId}] Empresa/role encontrados via DB:`, finalCompanyData
               );
-              setAuthError(null);
+              if (isMounted.current) {
+                setAuthError(null);
+              }
             } else {
               console.warn(
                 `[AuthContext Listener #${listenerInstanceId} Event #${eventInstanceId}] Usuário logado mas sem empresa/role associado válido encontrado no DB.`
               );
-              setAuthError('Nenhuma empresa ou função válida está vinculada a este usuário.');
+              if (isMounted.current) {
+                setAuthError('Nenhuma empresa ou função válida está vinculada a este usuário.');
+              }
               finalCompanyData = null;
             }
           } catch (lookupError) {
             console.error(
               `[AuthContext Listener #${listenerInstanceId} Event #${eventInstanceId}] Erro GERAL (try/catch) ao buscar empresa/role:`, lookupError
             );
-            setAuthError('Ocorreu um erro inesperado ao carregar seus dados de acesso.');
+            if (isMounted.current) {
+              setAuthError('Ocorreu um erro inesperado ao carregar seus dados de acesso.');
+            }
             finalCompanyData = null;
           } finally {
             console.log(
               `[AuthContext Listener #${listenerInstanceId} Event #${eventInstanceId}] Bloco FINALLY da busca company_users. Definindo empresa e loading = false.`
             );
             // Define a empresa (ou null) APÓS a busca e limpa o storage se a busca falhou
-            setActiveCompany(finalCompanyData);
-            setLoading(false); // Garante que loading seja false após a tentativa de busca
+            if (isMounted.current) {
+              setActiveCompany(finalCompanyData);
+              setLoading(false); // Garante que loading seja false após a tentativa de busca
+            }
           }
         }
 
@@ -237,11 +271,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         console.log(
           `[AuthContext Listener #${listenerInstanceId} Event #${eventInstanceId}] Usuário nulo na sessão. Limpando dados e definindo loading = false.`
         );
-        setUser(null);
-        setSession(null);
-        setActiveCompany(null); // Garante limpeza da empresa ativa
-        setAuthError(null); // Limpa erros
-        setLoading(false); // Define loading como false
+        if (isMounted.current) {
+          setUser(null);
+          setSession(null);
+          setActiveCompany(null); // Garante limpeza da empresa ativa
+          setAuthError(null); // Limpa erros
+          setLoading(false); // Define loading como false
+        }
       }
       console.log(`[AuthContext Listener #${listenerInstanceId} Event #${eventInstanceId}] === Fim do Processamento do Evento ===`);
     });

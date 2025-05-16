@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { EyeIcon } from './EyeIcon';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,6 +14,7 @@ export function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -82,13 +84,34 @@ export function Login() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Senha</Label>
-              <Input 
-                id="password" 
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
+              <div style={{ position: 'relative' }}>
+                <Input 
+                  id="password" 
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  style={{ paddingRight: 36 }}
+                />
+                <button
+                  type="button"
+                  aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                  onClick={() => setShowPassword((v) => !v)}
+                  style={{
+                    position: 'absolute',
+                    right: 8,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'none',
+                    border: 'none',
+                    padding: 0,
+                    cursor: 'pointer',
+                  }}
+                  tabIndex={-1}
+                >
+                  <EyeIcon open={showPassword} />
+                </button>
+              </div>
             </div>
           </CardContent>
           <CardFooter className="flex flex-col gap-2">
@@ -106,7 +129,7 @@ export function Login() {
               >
                 Esqueci minha senha
               </a>
-              <span className="mx-1">|</span>
+              {/* <span className="mx-1">|</span>
               <a 
                 href="#" 
                 className="text-blue-500 hover:underline"
@@ -116,7 +139,7 @@ export function Login() {
                 }}
               >
                 Não tem uma conta? Cadastre-se
-              </a>
+              </a> */}
             </div>
           </CardFooter>
         </form>

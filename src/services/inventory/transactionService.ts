@@ -1,4 +1,3 @@
-
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { 
@@ -134,6 +133,7 @@ export async function addInventoryTransaction(
       .from('products')
       .select('id, name, current_stock, cost, unit')
       .eq('id', transaction.product_id)
+      .eq('company_id', transaction.companyId)
       .single();
     
     if (productError) {
@@ -170,6 +170,7 @@ export async function addInventoryTransaction(
       .from('products')
       .update(updates)
       .eq('id', transaction.product_id)
+      .eq('company_id', transaction.companyId)
       .select();
     
     if (updateError) {

@@ -8,6 +8,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 // Auth Components
 import { AuthProvider } from "./contexts/AuthContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
+import ErrorBoundary from "./components/ErrorBoundary";
 import { ForgotPassword } from "./pages/Auth/ForgotPassword";
 import { ResetPassword } from "./pages/Auth/ResetPassword";
 import { Login } from "./pages/Auth/Login";
@@ -128,7 +129,9 @@ const App = () => {
               <Route path="/recipes/new" element={
                 <ProtectedRoute adminOnly>
                   <AppLayout>
-                    <RecipeForm />
+                    <ErrorBoundary>
+                      <RecipeForm />
+                    </ErrorBoundary>
                   </AppLayout>
                 </ProtectedRoute>
               } />
@@ -136,7 +139,9 @@ const App = () => {
               <Route path="/recipes/:id" element={
                 <ProtectedRoute>
                   <AppLayout>
-                    <RecipeForm />
+                    <ErrorBoundary>
+                      <RecipeForm />
+                    </ErrorBoundary>
                   </AppLayout>
                 </ProtectedRoute>
               } />
@@ -144,7 +149,9 @@ const App = () => {
               <Route path="/recipes/:id/edit" element={
                 <ProtectedRoute adminOnly>
                   <AppLayout>
-                    <RecipeForm />
+                    <ErrorBoundary>
+                      <RecipeForm />
+                    </ErrorBoundary>
                   </AppLayout>
                 </ProtectedRoute>
               } />
@@ -152,7 +159,9 @@ const App = () => {
               <Route path="/recipes/edit/:id" element={
                 <ProtectedRoute adminOnly>
                   <AppLayout>
-                    <RecipeForm />
+                    <ErrorBoundary>
+                      <RecipeForm />
+                    </ErrorBoundary>
                   </AppLayout>
                 </ProtectedRoute>
               } />

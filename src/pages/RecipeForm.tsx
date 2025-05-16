@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useLocation } from "react-router-dom";
 import { parseDecimalBR } from "@/lib/numberUtils";
 import { useNavigate, useParams } from "react-router-dom";
 import { Card } from "@/components/ui/card";
@@ -24,6 +25,15 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
   Plus, 
   Trash,
   Calculator,
@@ -34,7 +44,12 @@ import {
   List
 } from "lucide-react";
 import { toast } from "sonner";
-import { getProducts, Product } from "@/services/productService";
+import { 
+  getProducts, 
+  Product, 
+  createProduct, 
+  ProductType 
+} from "@/services/productService";
 import { 
   getRecipes, 
   getRecipeWithIngredients, 
@@ -61,11 +76,28 @@ interface Ingredient {
 }
 
 export default function RecipeForm() {
-  const { activeCompany, loading: authLoading } = useAuth();
+  const { activeCompany, user, loading: authLoading } = useAuth(); // Garantir que activeCompany é obtido do contexto
   // ... outros hooks e estados
 
+  // Ref para controlar se o componente está montado
+  const isMounted = useRef(true);
+  
   // Novo: tipo do produto gerado por receita
   const [productTypeForForm, setProductTypeForForm] = useState<'receita' | 'subreceita'>('receita');
+  
+  // Estado para armazenar a origem da navegação (para retorno após cadastro de produto)
+  const [returnToRecipe, setReturnToRecipe] = useState<boolean>(false);
+  
+  // Obter dados da localização (para verificar se estamos retornando do cadastro de produto)
+  const location = useLocation();
+  
+  // Configurar e limpar o ref de montagem
+  useEffect(() => {
+    isMounted.current = true;
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
 
   function moveIngredientUp(idx: number) {
     setIngredients(prev => {
@@ -98,6 +130,17 @@ export default function RecipeForm() {
   const [filteredSubgroups, setFilteredSubgroups] = useState<Subgroup[]>([]);
   const [fieldErrors, setFieldErrors] = useState<Record<string, boolean>>({});
   
+  // Estado para o modal de nova matéria-prima
+  const [newProductDialogOpen, setNewProductDialogOpen] = useState(false);
+  const [newProduct, setNewProduct] = useState({
+    name: '',
+    unit: 'KG',
+    cost: '',
+    supplier: '',
+    min_stock: '',
+    current_stock: ''
+  });
+  
   const [recipeForm, setRecipeForm] = useState({
     name: '',
     code: '',
@@ -122,6 +165,35 @@ export default function RecipeForm() {
   });
   
   const navigate = useNavigate();
+  
+  // Verificar se estamos retornando do cadastro de produto
+  useEffect(() => {
+    // Verificar se há state na localização indicando retorno do cadastro de produto
+    if (location.state && location.state.fromProductCreation) {
+      // Recuperar dados da receita do localStorage
+      const savedRecipeData = localStorage.getItem('temp_recipe_data');
+      if (savedRecipeData) {
+        try {
+          const parsedData = JSON.parse(savedRecipeData);
+          // Restaurar dados do formulário
+          setRecipeForm(parsedData.recipeForm || recipeForm);
+          setIngredients(parsedData.ingredients || ingredients);
+          // Limpar dados temporários
+          localStorage.removeItem('temp_recipe_data');
+          // Exibir mensagem de sucesso
+          if (location.state.newProductId && location.state.newProductName) {
+            toast.success(`Matéria-prima "${location.state.newProductName}" cadastrada com sucesso!`);
+            // Selecionar automaticamente o produto recém-criado
+            if (location.state.newProductId) {
+              handleProductSelect(location.state.newProductId);
+            }
+          }
+        } catch (error) {
+          console.error("Erro ao restaurar dados da receita:", error);
+        }
+      }
+    }
+  }, [location]);
   
   // Fetch products and sub-recipes on component mount
   useEffect(() => {
@@ -213,6 +285,7 @@ export default function RecipeForm() {
   const yieldKgForDisplay = parseDecimalBR(recipeForm.yieldKg); // Parse string para display
   const costPerKg = (yieldKgForDisplay && yieldKgForDisplay > 0) ? totalIngredientsCost / yieldKgForDisplay : 0;
   const costPerUnit = recipeForm.yieldUnits > 0 ? totalIngredientsCost / recipeForm.yieldUnits : 0;
+  const [sellingPrice, setSellingPrice] = useState<number>(0);
   
   // Filtrar subgrupos com base no grupo selecionado
   useEffect(() => {
@@ -368,6 +441,21 @@ export default function RecipeForm() {
     toast.success(`Custos calculados: Total R$ ${totalIngredientsCost.toFixed(2)} - Por kg: R$ ${costPerKg.toFixed(2)}`);
   };
   
+  // Função para navegar para a página de cadastro de produtos
+  const handleNavigateToNewProduct = () => {
+    // Salvar os dados atuais da receita no localStorage
+    const tempRecipeData = {
+      recipeForm,
+      ingredients
+    };
+    
+    // Armazenar os dados temporariamente
+    localStorage.setItem('temp_recipe_data', JSON.stringify(tempRecipeData));
+    
+    // Navegar para a página de cadastro de produtos com state para indicar retorno
+    navigate('/produtos/novo', { state: { returnToRecipe: true, recipeId: id } });
+  };
+  
   // Helper function to convert our front-end ingredient structure to the backend structure
   const mapIngredientsForBackend = (ingredients: Ingredient[]): Omit<RecipeIngredient, 'id' | 'recipe_id'>[] => {
     return ingredients.map(ing => ({
@@ -382,7 +470,10 @@ export default function RecipeForm() {
     }));
   };
 
-  const handleSave = async () => {
+  const handleSave = useCallback(async () => {
+    // Verificar se o componente ainda está montado
+    if (!isMounted.current) return;
+    
     // Reset error highlighting
     setFieldErrors({});
     
@@ -416,7 +507,17 @@ export default function RecipeForm() {
       return;
     }
     
+    // Verificar se o componente ainda está montado antes de atualizar o estado
+    if (!isMounted.current) return;
     setLoading(true);
+
+    if (!activeCompany) {
+      if (isMounted.current) {
+        toast.error("Nenhuma empresa ativa selecionada. Por favor, selecione uma empresa para continuar.");
+        setLoading(false);
+      }
+      return;
+    }
 
     // <<< INÍCIO DA LÓGICA DE VERIFICAÇÃO DE NOME DUPLICADO >>>
     const nameToCheck = recipeForm.name.trim();
@@ -478,7 +579,8 @@ export default function RecipeForm() {
         const existingIngredientIds = new Set<string>();
         
         // Get current ingredients in the database
-        const { ingredients: currentIngredients } = await getRecipeWithIngredients(id);
+        // Corrigido: Adicionado activeCompany.id como segundo argumento
+        const { ingredients: currentIngredients } = await getRecipeWithIngredients(id, activeCompany.id);
         currentIngredients.forEach(ing => {
           if (ing.id) existingIngredientIds.add(ing.id);
         });
@@ -548,58 +650,86 @@ export default function RecipeForm() {
       console.error("Error saving recipe:", error);
       toast.error(`Erro ao ${isEditing ? 'atualizar' : 'salvar'} receita`);
     } finally {
-      setLoading(false);
+      // Verificar se o componente ainda está montado antes de atualizar o estado
+      if (isMounted.current) {
+        setLoading(false);
+      }
     }
-  };
+  }, [recipeForm, ingredients, activeCompany, id, isEditing, costPerKg, costPerUnit, navigate]);
 
   console.log("Renderizando RecipeForm com estado:", recipeForm); // <-- LOG DE DEPURAÇÃO
   return (
     <div className="animate-fade-in">
-      <div className="flex items-center mb-6">
-        <Button 
-          variant="ghost" 
-          onClick={() => navigate('/recipes')} 
-          className="mr-4"
-          disabled={loading}
-        >
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Voltar
-        </Button>
-        
-        <div>
-          <h1 className="text-2xl font-bold mb-6 flex items-center gap-3">
-        {isEditing ? (
-          <><List className="w-6 h-6" /> Editar Receita</>
-        ) : (
-          <><Plus className="w-6 h-6" /> Nova Receita</>
-        )}
-      </h1>
-      {/* Dropdown de unidade do produto gerado (visível apenas se não for subreceita) */}
-      {!recipeForm.isSubProduct && (
-        <div className="mb-4">
-          <label htmlFor="finalUnit" className="block text-sm font-medium text-gray-700 mb-1">Unidade do Produto Gerado</label>
-          <Select
-            value={recipeForm.finalUnit}
-            onValueChange={(value: 'UN' | 'KG') => setRecipeForm(prev => ({ ...prev, finalUnit: value }))}
+      <div className="border-b border-gray-200 pb-5 mb-6">
+        <div className="flex justify-between items-center">
+          <div className="flex items-center">
+            <Button 
+              variant="ghost" 
+              onClick={() => navigate('/recipes')} 
+              className="mr-4"
+              disabled={loading}
+            >
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Voltar
+            </Button>
+            
+            <h1 className="text-2xl font-bold flex items-center gap-3">
+              {isEditing ? (
+                <><List className="w-6 h-6 text-bakery-brown" /> Editar Receita</>
+              ) : (
+                <><Plus className="w-6 h-6 text-bakery-brown" /> Nova Receita</>
+              )}
+            </h1>
+          </div>
+          
+          <Button 
+            onClick={handleSave}
+            className="bg-bakery-amber hover:bg-bakery-brown text-white"
+            disabled={loading}
           >
-            <SelectTrigger id="finalUnit">
-              <SelectValue placeholder="Selecione a unidade" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="UN">Unidade (UN)</SelectItem>
-              <SelectItem value="KG">Quilograma (KG)</SelectItem>
-            </SelectContent>
-          </Select>
+            {/* Renderização simplificada para evitar problemas com o componente Save */}
+            {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+            {!loading && <span className="h-4 w-4 mr-2 flex items-center justify-center"><Save className="h-4 w-4" /></span>}
+            <span>
+              {loading ? (isEditing ? 'Atualizando...' : 'Salvando...') : (isEditing ? 'Atualizar Receita' : 'Salvar Receita')}
+            </span>
+          </Button>
         </div>
-      )}
+        
+        <div className="mt-4 flex items-center justify-between">
           <p className="text-gray-600">
             {isEditing ? 'Atualize os detalhes da receita' : 'Cadastre uma nova receita ou fórmula'}
           </p>
+          
+          {/* Unidade do produto gerado com checkboxes (visível apenas se não for subreceita) */}
+          {!recipeForm.isSubProduct && (
+            <div className="flex items-center space-x-6">
+              <label className="text-sm font-medium text-gray-700">Unidade do Produto Gerado:</label>
+              <div className="flex space-x-4">
+                <div className="flex items-center space-x-2">
+                  <Checkbox 
+                    id="unit-kg" 
+                    checked={recipeForm.finalUnit === 'KG'}
+                    onCheckedChange={() => setRecipeForm(prev => ({ ...prev, finalUnit: 'KG' }))}
+                  />
+                  <label htmlFor="unit-kg" className="text-sm cursor-pointer">Quilograma (KG)</label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox 
+                    id="unit-un" 
+                    checked={recipeForm.finalUnit === 'UN'}
+                    onCheckedChange={() => setRecipeForm(prev => ({ ...prev, finalUnit: 'UN' }))}
+                  />
+                  <label htmlFor="unit-un" className="text-sm cursor-pointer">Unidade (UN)</label>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
       
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
+      <div className="grid grid-cols-1 gap-6 px-1">
+        <div className="w-full">
           <Card className="mb-6">
             <div className="p-6">
               <h2 className="text-xl font-semibold text-bakery-brown mb-4">Informações Gerais</h2>
@@ -630,15 +760,14 @@ export default function RecipeForm() {
                     required
                     className={`form-input ${fieldErrors.name ? 'border-red-500 ring-red-500' : ''}`}
                     suggestions={existingRecipes.map(recipe => recipe.name)}
-                    //onSelect={(value) => {
-                    //  // Only update if the value is different from current
-                    //  if (value !== recipeForm.name) {
-                    //    setRecipeForm(prev => ({
-                    //      ...prev,
-                    //      name: value
-                    //    }));
-                    //  }
-                    //}}
+                    onSelect={(value) => {
+                      // Only update if the value is different from current
+                      if (recipeForm.name !== value) {
+                        setRecipeForm(prev => ({ ...prev, name: value }));
+                        // Clear the error for this field if it was previously set
+                        setFieldErrors(prev => ({ ...prev, name: false }));
+                      }
+                    }}
                   />
                 </div>
                 
@@ -724,103 +853,176 @@ export default function RecipeForm() {
             </div>
           </Card>
           
-          <Card>
+          <Card className="overflow-hidden">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <div className="border-b px-6 py-3">
-                <TabsList className="grid w-full max-w-md grid-cols-3">
-                  <TabsTrigger value="ingredients">Ingredientes</TabsTrigger>
-                  <TabsTrigger value="instructions">Modo de Preparo</TabsTrigger>
-                  <TabsTrigger value="media">Mídia</TabsTrigger>
+              <div className="border-b px-4 py-3 bg-gray-50">
+                <TabsList className="grid w-full grid-cols-4 gap-1">
+                  <TabsTrigger value="ingredients" className="px-2 py-2 text-sm font-medium">Ingredientes</TabsTrigger>
+                  <TabsTrigger value="instructions" className="px-2 py-2 text-sm font-medium">Modo de Preparo</TabsTrigger>
+                  <TabsTrigger value="media" className="px-2 py-2 text-sm font-medium">Mídia</TabsTrigger>
+                  <TabsTrigger value="costs" className="px-2 py-2 text-sm font-medium">Precificação</TabsTrigger>
                 </TabsList>
               </div>
               
               <TabsContent value="ingredients" className="p-6 mt-0">
                 <div className="mb-6 border-b pb-6">
-                  <h3 className="text-lg font-medium text-bakery-brown mb-4">Adicionar Ingrediente</h3>
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-lg font-medium text-bakery-brown">Adicionar Ingrediente</h3>
+                    <Button 
+                      variant="outline" 
+                      className="bg-green-50 hover:bg-green-100 text-green-700 border-green-200"
+                      onClick={handleNavigateToNewProduct}
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Cadastrar Nova Matéria Prima
+                    </Button>
+                  </div>
                   
                   <div className="flex flex-col md:flex-row gap-3 mb-4 items-end">
                     {/* Etapa */}
                     <div className="flex-1 min-w-[110px] max-w-[140px]">
                       <label htmlFor="etapa" className="form-label">Etapa</label>
-                      <Select
+                      {/* Substituir o Select por um elemento select nativo para evitar problemas de DOM */}
+                      <select
+                        id="etapa"
                         name="etapa"
                         value={newIngredient.etapa ?? ''}
-                        onValueChange={value => setNewIngredient(prev => ({ ...prev, etapa: value }))}
+                        onChange={(e) => setNewIngredient(prev => ({ ...prev, etapa: e.target.value }))}
+                        className="w-full flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                       >
-                        <SelectTrigger className="form-input">
-                          <SelectValue placeholder="Selecione a etapa (opcional)" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="massa">Massa</SelectItem>
-                          <SelectItem value="recheio">Recheio</SelectItem>
-                          <SelectItem value="cobertura">Cobertura</SelectItem>
-                          <SelectItem value="finalizacao">Finalização</SelectItem>
-                          <SelectItem value="outro">Outro</SelectItem>
-                        </SelectContent>
-                      </Select>
+                        <option value="">Selecione a etapa (opcional)</option>
+                        <option value="massa">Massa</option>
+                        <option value="recheio">Recheio</option>
+                        <option value="cobertura">Cobertura</option>
+                        <option value="finalizacao">Finalização</option>
+                        <option value="outro">Outro</option>
+                      </select>
                     </div>
                     {/* Tipo */}
                     <div className="flex-1 min-w-[110px] max-w-[140px]">
                       <label htmlFor="ingredientType" className="form-label">Tipo *</label>
-                      <Select 
-                        value={newIngredient.isSubRecipe ? 'sub-product' : 'raw-material'} 
-                        onValueChange={handleProductTypeChange}
+                      {/* Substituir o Select por um elemento select nativo para evitar problemas de DOM */}
+                      <select
+                        id="ingredientType"
+                        name="ingredientType"
+                        value={newIngredient.isSubRecipe ? 'sub-product' : 'raw-material'}
+                        onChange={(e) => handleProductTypeChange(e.target.value)}
+                        className="w-full flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                       >
-                        <SelectTrigger className="form-input">
-                          <SelectValue placeholder="Selecione o tipo" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="raw-material">Matéria Prima</SelectItem>
-                          <SelectItem value="sub-product">SubReceita</SelectItem>
-                        </SelectContent>
-                      </Select>
+                        <option value="raw-material">Matéria Prima</option>
+                        <option value="sub-product">SubReceita</option>
+                      </select>
                     </div>
                     {/* Ingrediente */}
                     <div className="flex-[2_2_0%] min-w-[200px] max-w-[420px]">
                       <label htmlFor="productId" className="form-label">{newIngredient.isSubRecipe ? 'SubReceita *' : 'Ingrediente *'}</label>
                       {newIngredient.isSubRecipe ? (
-                        <Select 
-                          value={newIngredient.subRecipeId || ''} 
-                          onValueChange={handleSubRecipeSelect}
-                        >
-                          <SelectTrigger className="form-input">
-                            <SelectValue placeholder="Selecione uma SubReceita" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {subRecipes.length > 0 ? (
-                              subRecipes.map(recipe => (
-                                <SelectItem key={recipe.id} value={recipe.id}>
-                                  {recipe.name} (R$ {recipe.cost_per_kg?.toFixed(2)}/kg)
-                                </SelectItem>
-                              ))
-                            ) : (
-                              <SelectItem value="none" disabled>Nenhuma SubReceita disponível</SelectItem>
-                            )}
-                          </SelectContent>
-                        </Select>
+                        <div className="relative">
+                          <Input
+                            type="text"
+                            className="form-input"
+                            placeholder="Digite para buscar uma SubReceita"
+                            value={newIngredient.productName || ''}
+                            onChange={(e) => {
+                              setNewIngredient(prev => ({
+                                ...prev,
+                                productName: e.target.value,
+                                subRecipeId: null // Limpar o ID quando o usuário está digitando
+                              }));
+                            }}
+                          />
+                          {newIngredient.productName && !newIngredient.subRecipeId && (
+                            <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-auto">
+                              {(() => {
+                                const filteredSubRecipes = subRecipes.filter(r => 
+                                  r.name.toLowerCase().includes(newIngredient.productName?.toLowerCase() || '')
+                                );
+                                
+                                if (filteredSubRecipes.length > 0) {
+                                  return filteredSubRecipes.map(recipe => (
+                                    <div
+                                      key={recipe.id}
+                                      className="px-4 py-2 cursor-pointer hover:bg-gray-100 flex justify-between items-center"
+                                      onClick={() => {
+                                        handleSubRecipeSelect(recipe.id);
+                                        setNewIngredient(prev => ({
+                                          ...prev,
+                                          productName: recipe.name,
+                                          subRecipeId: recipe.id
+                                        }));
+                                      }}
+                                    >
+                                      <span>{recipe.name}</span>
+                                      <span className="text-gray-500">
+                                        {recipe.cost_per_kg ? recipe.cost_per_kg.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) + '/kg' : ''}
+                                      </span>
+                                    </div>
+                                  ));
+                                } else {
+                                  return (
+                                    <div className="px-4 py-2 text-gray-500">
+                                      Nenhuma SubReceita encontrada
+                                    </div>
+                                  );
+                                }
+                              })()}
+                            </div>
+                          )}
+                        </div>
                       ) : (
-                        <Select 
-                          value={newIngredient.productId || ''} 
-                          onValueChange={handleProductSelect}
-                        >
-                          <SelectTrigger className="form-input">
-                            <SelectValue placeholder="Selecione uma matéria prima" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {(() => {
-                              const materiasPrimas = products.filter(p => p.product_type === 'materia_prima');
-                              if (materiasPrimas.length > 0) {
-                                return materiasPrimas.map(product => (
-                                  <SelectItem key={product.id} value={product.id}>
-                                    {product.name} ({product.unit}) {product.cost ? `- ${product.cost.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}` : ''}
-                                  </SelectItem>
-                                ));
-                              } else {
-                                return <SelectItem value="none" disabled>Nenhuma matéria prima disponível</SelectItem>;
-                              }
-                            })()}
-                          </SelectContent>
-                        </Select>
+                        <div className="relative">
+                          <Input
+                            type="text"
+                            className="form-input"
+                            placeholder="Digite para buscar uma matéria prima"
+                            value={newIngredient.productName || ''}
+                            onChange={(e) => {
+                              setNewIngredient(prev => ({
+                                ...prev,
+                                productName: e.target.value,
+                                productId: null // Limpar o ID quando o usuário está digitando
+                              }));
+                            }}
+                          />
+                          {newIngredient.productName && !newIngredient.productId && (
+                            <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-auto">
+                              {(() => {
+                                const materiasPrimas = products.filter(p => 
+                                  p.product_type === 'materia_prima' && 
+                                  p.name.toLowerCase().includes(newIngredient.productName?.toLowerCase() || '')
+                                );
+                                
+                                if (materiasPrimas.length > 0) {
+                                  return materiasPrimas.map(product => (
+                                    <div
+                                      key={product.id}
+                                      className="px-4 py-2 cursor-pointer hover:bg-gray-100 flex justify-between items-center"
+                                      onClick={() => {
+                                        handleProductSelect(product.id);
+                                        setNewIngredient(prev => ({
+                                          ...prev,
+                                          productName: product.name,
+                                          productId: product.id
+                                        }));
+                                      }}
+                                    >
+                                      <span>{product.name} ({product.unit})</span>
+                                      <span className="text-gray-500">
+                                        {product.cost ? product.cost.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : ''}
+                                      </span>
+                                    </div>
+                                  ));
+                                } else {
+                                  return (
+                                    <div className="px-4 py-2 text-gray-500">
+                                      Nenhuma matéria prima encontrada
+                                    </div>
+                                  );
+                                }
+                              })()}
+                            </div>
+                          )}
+                        </div>
                       )}
                     </div>
                     {/* Quantidade */}
@@ -1017,67 +1219,147 @@ export default function RecipeForm() {
                   </div>
                 </div>
               </TabsContent>
-            </Tabs>
-          </Card>
-        </div>
-        
-        <div>
-          <Card>
-            <div className="p-6">
-              <h2 className="text-xl font-semibold text-bakery-brown mb-4">Análise de Custo</h2>
               
-              <div className="space-y-6">
-                <div className="border-b pb-4">
-                  <h3 className="text-sm text-gray-600 mb-1">Custo Total dos Ingredientes</h3>
-                  <p className="text-2xl font-bold text-bakery-brown">
-                    {totalIngredientsCost.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                  </p>
+              <TabsContent value="costs" className="p-6 mt-0">
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-xl font-semibold text-bakery-brown">Análise de Custo</h2>
+                  <div>
+                    <Button 
+                      onClick={handleCalculate}
+                      variant="outline" 
+                      className="flex items-center"
+                    >
+                      <Calculator className="h-4 w-4 mr-2" />
+                      Recalcular Precificação
+                    </Button>
+                  </div>
                 </div>
                 
-                <div className="border-b pb-4">
-                  <h3 className="text-sm text-gray-600 mb-1">Custo por kg</h3>
-                  <p className="text-2xl font-bold text-bakery-brown">
-                    {costPerKg.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                  </p>
+                {/* Seção 2: Resumo Financeiro e de Rendimento da Receita */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 bg-gray-50 p-4 rounded-lg">
+                  <div className="p-3 border-r border-gray-200">
+                    <h3 className="text-sm text-gray-600 mb-1">Peso Total dos Ingredientes</h3>
+                    <p className="text-xl font-bold text-bakery-brown">
+                      {ingredients.reduce((sum, ing) => sum + ing.quantity, 0).toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} kg
+                    </p>
+                  </div>
+                  
+                  <div className="p-3 border-r border-gray-200">
+                    <h3 className="text-sm text-gray-600 mb-1">Custo Total da Receita</h3>
+                    <p className="text-xl font-bold text-bakery-brown">
+                      {totalIngredientsCost.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    </p>
+                  </div>
+                  
+                  <div className="p-3">
+                    <h3 className="text-sm text-gray-600 mb-1">Rendimento</h3>
+                    <p className="text-xl font-bold text-bakery-brown">
+                      {(yieldKgForDisplay !== null && !isNaN(yieldKgForDisplay)) ? yieldKgForDisplay.toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 }) : '0,000'} kg
+                      {recipeForm.yieldUnits > 0 && ` / ${recipeForm.yieldUnits} un.`}
+                    </p>
+                  </div>
                 </div>
                 
-                <div className="pb-4">
-                  <h3 className="text-sm text-gray-600 mb-1">Custo por Unidade</h3>
-                  <p className="text-2xl font-bold text-bakery-brown">
-                    {recipeForm.yieldUnits > 0 
-                      ? `${costPerUnit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}` 
-                      : 'N/A'}
-                  </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                  <div className="p-4 bg-blue-50 rounded-md">
+                    <h3 className="text-sm text-gray-600 mb-1">Custo por kg</h3>
+                    <p className="text-2xl font-bold text-bakery-brown">
+                      {costPerKg.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    </p>
+                  </div>
+                  
+                  <div className="p-4 bg-blue-50 rounded-md">
+                    <h3 className="text-sm text-gray-600 mb-1">Custo por Unidade</h3>
+                    <p className="text-2xl font-bold text-bakery-brown">
+                      {recipeForm.yieldUnits > 0 
+                        ? costPerUnit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+                        : "N/A"}
+                    </p>
+                  </div>
                 </div>
                 
-                <Button 
-                  onClick={handleCalculate}
-                  variant="outline" 
-                  className="w-full mb-3"
-                >
-                  <Calculator className="h-4 w-4 mr-2" />
-                  Recalcular Custos
-                </Button>
+                {/* Seção 1: Detalhamento de Custos por Ingrediente */}
+                <div className="mb-6">
+                  <h3 className="text-lg font-medium text-bakery-brown mb-4">Detalhamento de Precificação por Ingrediente</h3>
+                  
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Ingrediente</TableHead>
+                          <TableHead className="text-right">Quantidade</TableHead>
+                          <TableHead>Unidade</TableHead>
+                          <TableHead className="text-right">Custo Unitário</TableHead>
+                          <TableHead className="text-right">Custo Total</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {ingredients.length > 0 ? (
+                          ingredients.map((ing) => (
+                            <TableRow key={ing.id}>
+                              <TableCell className="font-medium whitespace-nowrap overflow-hidden text-ellipsis max-w-xs" style={{ maxWidth: 260 }}>{ing.productName}</TableCell>
+                              <TableCell className="text-right" style={{ fontVariantNumeric: 'tabular-nums' }}>{ing.quantity.toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })}</TableCell>
+                              <TableCell>{ing.unit}</TableCell>
+                              <TableCell className="text-right">{ing.cost.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</TableCell>
+                              <TableCell className="text-right font-medium">{ing.totalCost.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</TableCell>
+                            </TableRow>
+                          ))
+                        ) : (
+                          <TableRow>
+                            <TableCell colSpan={5} className="text-center py-4 text-gray-500">
+                              Nenhum ingrediente adicionado.
+                            </TableCell>
+                          </TableRow>
+                        )}
+                        {ingredients.length > 0 && (
+                          <TableRow className="bg-gray-50">
+                            <TableCell colSpan={4} className="font-bold text-right">Total:</TableCell>
+                            <TableCell className="text-right font-bold">{totalIngredientsCost.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
                 
-                <Button 
-                  onClick={handleSave}
-                  className="w-full bg-bakery-amber hover:bg-bakery-brown text-white"
-                  disabled={loading}
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      {isEditing ? 'Atualizando...' : 'Salvando...'}
-                    </>
-                  ) : (
-                    <>
-                      <Save className="h-4 w-4 mr-2" />
-                      {isEditing ? 'Atualizar Receita' : 'Salvar Receita'}
-                    </>
-                  )}
-                </Button>
-              </div>
-            </div>
+                {/* Análise Financeira */}
+                <div className="border-t pt-6">
+                  <h3 className="text-lg font-medium text-bakery-brown mb-4">Análise Financeira</h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label htmlFor="sellingPrice" className="form-label">Preço de Venda (R$)</label>
+                      <Input
+                        id="sellingPrice"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder="0,00"
+                        value={sellingPrice || ''}
+                        onChange={(e) => setSellingPrice(parseFloat(e.target.value) || 0)}
+                        className="max-w-xs"
+                      />
+                    </div>
+                    
+                    {sellingPrice > 0 && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                        <div className="p-4 bg-green-50 rounded-md">
+                          <h4 className="text-sm text-gray-600 mb-1">Margem de Lucro</h4>
+                          <p className="text-xl font-bold text-green-600">
+                            {((sellingPrice - costPerUnit) / sellingPrice * 100).toFixed(2)}%
+                          </p>
+                        </div>
+                        <div className="p-4 bg-green-50 rounded-md">
+                          <h4 className="text-sm text-gray-600 mb-1">Lucro por Unidade</h4>
+                          <p className="text-xl font-bold text-green-600">
+                            {(sellingPrice - costPerUnit).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </TabsContent>
+            </Tabs>
           </Card>
         </div>
       </div>

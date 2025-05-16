@@ -635,7 +635,7 @@ export async function updateAllRecipesCosts(companyId: string): Promise<boolean>
       await updateRecipeCost(recipe.id, companyId);
     }
     
-    toast.success("Custos de todas as receitas atualizados com sucesso");
+    toast.success("Precificação de todas as receitas atualizada com sucesso");
     return true;
   } catch (error) {
     console.error("Error updating all recipes costs:", error);

@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+// Removido import do Select do Radix UI para evitar problemas de manipulação do DOM
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Loader2, Info, ArrowLeft, Save, Calculator, Trash, List, Plus, UploadCloud } from 'lucide-react'; // Added missing icons if needed by JSX
@@ -106,6 +106,27 @@ const ProductForm: React.FC<ProductFormProps> = ({
   subgroups,
   forceProductType
 }) => {
+  // Ref para controlar se o componente está montado
+  const isMounted = useRef(true);
+  
+  // Refs para controlar timeouts e cancelar operações pendentes
+  const pendingTimeoutsRef = useRef<number[]>([]);
+  
+  // Efeito para limpar a ref quando o componente for desmontado
+  useEffect(() => {
+    console.log('[ProductForm] Componente montado, isMounted=true');
+    
+    return () => {
+      // Limpar todos os timeouts pendentes
+      pendingTimeoutsRef.current.forEach(timeoutId => {
+        window.clearTimeout(timeoutId);
+      });
+      
+      // Marcar componente como desmontado
+      isMounted.current = false;
+      console.log('[ProductForm] Componente desmontado, isMounted=false, timeouts limpos');
+    };
+  }, []);
 
   const { activeCompany } = useAuth();
   const navigate = useNavigate(); // Assuming navigation might be needed
@@ -120,6 +141,8 @@ const ProductForm: React.FC<ProductFormProps> = ({
     { key: 'saturday' as keyof ProductFormData, label: 'Sáb' },
     { key: 'sunday' as keyof ProductFormData, label: 'Dom' },
   ] as const;
+  
+  // Garantir que os labels sejam sempre os abreviados, mesmo se houver override em algum lugar
 
   const disabledFieldStyle = {
     backgroundColor: '#f3f4f6',
@@ -198,27 +221,60 @@ const ProductForm: React.FC<ProductFormProps> = ({
 
   // Efeito para calcular custo de matéria prima - Definido uma vez
   useEffect(() => {
+    // Verificar se o componente ainda está montado
+    if (!isMounted.current) return;
     if (formData.product_type === 'materia_prima') {
       // Só recalcula se o usuário digitou algo em Peso ou Valor
       if (pesoComprado.trim() !== '' || valorPago.trim() !== '') {
         const peso = parseDecimalBR(pesoComprado);
         const valor = parseDecimalBR(valorPago);
         if (!isNaN(peso) && peso > 0 && !isNaN(valor) && valor >= 0) {
-          setCustoCalculado(valor / peso);
+          safeSetState(setCustoCalculado, valor / peso);
         } else {
           // Mantém o último custo válido
         }
       }
       // Se ambos estiverem vazios, não faz nada (mantém custo carregado na edição)
     } else {
-      setCustoCalculado(0);
-      setPesoComprado('');
-      setValorPago('');
+      safeSetState(setCustoCalculado, 0);
+      safeSetState(setPesoComprado, '');
+      safeSetState(setValorPago, '');
     }
   }, [pesoComprado, valorPago, formData.product_type]);
 
+  // Função segura para atualização de estado
+  const safeSetState = <T,>(setter: React.Dispatch<React.SetStateAction<T>>, value: React.SetStateAction<T>) => {
+    if (isMounted.current) {
+      setter(value);
+    } else {
+      console.log('[ProductForm] Tentativa de atualizar estado em componente desmontado evitada');
+    }
+  };
+  
+  // Função segura para criar timeouts que serão limpos na desmontagem
+  const safeTimeout = (callback: () => void, delay: number) => {
+    if (!isMounted.current) return;
+    
+    const timeoutId = window.setTimeout(() => {
+      // Remove o ID da lista quando executado
+      pendingTimeoutsRef.current = pendingTimeoutsRef.current.filter(id => id !== timeoutId);
+      
+      // Só executa o callback se o componente ainda estiver montado
+      if (isMounted.current) {
+        callback();
+      }
+    }, delay);
+    
+    // Adiciona o ID à lista de timeouts pendentes
+    pendingTimeoutsRef.current.push(timeoutId);
+    
+    return timeoutId;
+  };
+
   // Efeito para inicializar o formulário - Definido uma vez
   useEffect(() => {
+    // Verificar se o componente ainda está montado
+    if (!isMounted.current) return;
     const currentCompanyId = activeCompany?.id || null;
 
     if (initialData && isEditMode) {
@@ -260,20 +316,20 @@ const ProductForm: React.FC<ProductFormProps> = ({
         console.log('[DEBUG useEffect] Forçando unit para Kg em modo de edição.');
         initialFormState.unit = 'Kg';
       }
-      setFormData(initialFormState);
+      safeSetState(setFormData, initialFormState);
 
       // Se for matéria prima em modo de edição, inicializa custoCalculado com o custo carregado do banco
       if(initialFormState.product_type === 'materia_prima' && initialFormState.cost !== null) {
-          setCustoCalculado(initialFormState.cost);
-          setPesoComprado('');
-          setValorPago('');
+          safeSetState(setCustoCalculado, initialFormState.cost);
+          safeSetState(setPesoComprado, '');
+          safeSetState(setValorPago, '');
       }
 
       // Filter subgroups based on initial group_id (string)
       if (initialFormState.group_id) {
-        setFilteredSubgroups(subgroups.filter(sg => String(sg.group_id) === initialFormState.group_id));
+        safeSetState(setFilteredSubgroups, subgroups.filter(sg => String(sg.group_id) === initialFormState.group_id));
       } else {
-        setFilteredSubgroups(subgroups);
+        safeSetState(setFilteredSubgroups, subgroups);
       }
     } else {
       // Creation mode
@@ -289,26 +345,28 @@ const ProductForm: React.FC<ProductFormProps> = ({
         console.log('[DEBUG useEffect] Forçando unit para Kg em modo de criação.');
         defaultData.unit = 'Kg';
       }
-      setFormData(defaultData);
-      setFilteredSubgroups(subgroups);
-      setPesoComprado('');
-      setValorPago('');
-      setCustoCalculado(0);
+      safeSetState(setFormData, defaultData);
+      safeSetState(setFilteredSubgroups, subgroups);
+      safeSetState(setPesoComprado, '');
+      safeSetState(setValorPago, '');
+      safeSetState(setCustoCalculado, 0);
     }
   }, [initialData, isEditMode, subgroups, activeCompany]); // Added activeCompany
 
   // Efeito para filtrar subgrupos quando o grupo muda - Definido uma vez
   useEffect(() => {
+    // Verificar se o componente ainda está montado
+    if (!isMounted.current) return;
     if (formData.group_id) {
       const newFiltered = subgroups.filter(sg => String(sg.group_id) === formData.group_id);
-      setFilteredSubgroups(newFiltered);
+      safeSetState(setFilteredSubgroups, newFiltered);
       if (formData.subgroup_id && !newFiltered.some(sg => String(sg.id) === formData.subgroup_id)) {
-        setFormData(prev => ({ ...prev, subgroup_id: null }));
+        safeSetState(setFormData, prev => ({ ...prev, subgroup_id: null }));
       }
     } else {
-      setFilteredSubgroups(subgroups);
+      safeSetState(setFilteredSubgroups, subgroups);
       if (formData.subgroup_id) {
-        setFormData(prev => ({ ...prev, subgroup_id: null }));
+        safeSetState(setFormData, prev => ({ ...prev, subgroup_id: null }));
       }
     }
   }, [formData.group_id, subgroups]); // Removed subgroup_id dependency
@@ -339,10 +397,10 @@ const ProductForm: React.FC<ProductFormProps> = ({
       }
     }
 
-    setFormData(prev => ({ ...prev, [key]: newValue }));
+    safeSetState(setFormData, prev => ({ ...prev, [key]: newValue }));
 
     if (errors[key]) {
-      setErrors(prev => { const newErrors = { ...prev }; delete newErrors[key]; return newErrors; });
+      safeSetState(setErrors, prev => { const newErrors = { ...prev }; delete newErrors[key]; return newErrors; });
     }
   }, [errors, isFieldDisabled]); // Added isFieldDisabled
 
@@ -368,16 +426,16 @@ const ProductForm: React.FC<ProductFormProps> = ({
      }
 
 
-    setFormData(prev => {
+    safeSetState(setFormData, prev => {
       const updatedState = { ...prev, [key]: processedValue };
 
       if (key === 'product_type') {
         if (processedValue === 'materia_prima') {
           updatedState.unit = 'Kg';
           updatedState.cost = null; // Será calculado
-          setPesoComprado('');
-          setValorPago('');
-          setCustoCalculado(0);
+          safeSetState(setPesoComprado, '');
+          safeSetState(setValorPago, '');
+          safeSetState(setCustoCalculado, 0);
         } else {
           // Reset cost if changing *from* materia_prima
           if (prev.product_type === 'materia_prima') updatedState.cost = null;
@@ -407,7 +465,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
     });
 
     if (errors[key]) {
-      setErrors(prev => { const newErrors = { ...prev }; delete newErrors[key]; return newErrors; });
+      safeSetState(setErrors, prev => { const newErrors = { ...prev }; delete newErrors[key]; return newErrors; });
     }
   }, [errors, isFieldDisabled]); // Added isFieldDisabled
 
@@ -465,7 +523,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
 
 
     console.log('[DEBUG validateForm] Objeto newErrors calculado:', JSON.stringify(newErrors));
-    setErrors(newErrors);
+    safeSetState(setErrors, newErrors);
     const isValidResult = Object.keys(newErrors).length === 0;
     console.log('[DEBUG validateForm] newErrors final:', JSON.stringify(newErrors), 'Retornando isValid:', isValidResult);
     return isValidResult;
@@ -504,24 +562,29 @@ const ProductForm: React.FC<ProductFormProps> = ({
     if (nameToCheck && nameToCheck.trim().length >= 3) {
       const { similars, exact } = await checkSimilarNamesAndExact(nameToCheck);
       if (formData.name === nameToCheck) { // Ensure name hasn't changed during async check
-          setHasExactName(exact);
-          setSimilarNames(similars);
-          setShowSimilarAlert(similars.length > 0 && !exact);
-          if (exact) setErrors(prev => ({...prev, name: 'Já existe um produto com este nome.'}));
-          else if (errors.name === 'Já existe um produto com este nome.') setErrors(prev => { delete prev.name; return {...prev}; });
+          safeSetState(setHasExactName, exact);
+          safeSetState(setSimilarNames, similars);
+          safeSetState(setShowSimilarAlert, similars.length > 0 && !exact);
+          if (exact) safeSetState(setErrors, prev => ({...prev, name: 'Já existe um produto com este nome.'}));
+          else if (errors.name === 'Já existe um produto com este nome.') safeSetState(setErrors, prev => { delete prev.name; return {...prev}; });
       }
     } else {
-        setHasExactName(false);
-        setSimilarNames([]);
-        setShowSimilarAlert(false);
-        if (errors.name === 'Já existe um produto com este nome.') setErrors(prev => { delete prev.name; return {...prev}; });
+        safeSetState(setHasExactName, false);
+        safeSetState(setSimilarNames, []);
+        safeSetState(setShowSimilarAlert, false);
+        if (errors.name === 'Já existe um produto com este nome.') safeSetState(setErrors, prev => { delete prev.name; return {...prev}; });
     }
   }, [formData.name, checkSimilarNamesAndExact, isFieldDisabled, errors.name]); // Added dependencies
 
   // Função separada para a lógica de envio real
   const executeSubmit = async (companyId: string) => {
-        setShowSimilarAlert(false);
-        setPendingSubmit(null);
+    // Verificar se o componente ainda está montado
+    if (!isMounted.current) {
+      console.log('[ProductForm] Tentativa de executar submissão após desmontagem');
+      return;
+    }
+        safeSetState(setShowSimilarAlert, false);
+        safeSetState(setPendingSubmit, null);
 
         let finalCost = formData.cost;
 
@@ -577,17 +640,31 @@ const ProductForm: React.FC<ProductFormProps> = ({
 
         try {
             await onSubmit(dataToSend); // Call parent onSubmit
-            setSuccessMsg(`Produto ${isEditMode ? 'atualizado' : 'cadastrado'} com sucesso!`);
+            
+            // Verificar se o componente ainda está montado antes de atualizar o estado
+            if (!isMounted.current) {
+              console.log('[ProductForm] Produto salvo, mas componente já desmontado');
+              return;
+            }
+            
+            safeSetState(setSuccessMsg, `Produto ${isEditMode ? 'atualizado' : 'cadastrado'} com sucesso!`);
             toast.success(`Produto ${isEditMode ? 'atualizado' : 'cadastrado'}!`);
              // Optional: Clear form on successful creation? Or let parent handle navigation/reset?
-             // if (!isEditMode) { setFormData(getDefaultFormData()); setPesoComprado(''); setValorPago(''); }
+             // if (!isEditMode) { safeSetState(setFormData, getDefaultFormData()); safeSetState(setPesoComprado, ''); safeSetState(setValorPago, ''); }
              if (!isEditMode && navigate) { // Navigate back after successful create?
                  // navigate('/products'); // Example
              }
         } catch (err: any) {
             console.error('Erro ao salvar produto via onSubmit:', err);
             const backendError = err?.message || err?.error_description || 'Ocorreu um erro desconhecido.';
-            setErrorMsg(`Erro ao salvar: ${backendError}`);
+            
+            // Verificar se o componente ainda está montado antes de atualizar o estado
+            if (!isMounted.current) {
+              console.log('[ProductForm] Erro ao salvar, mas componente já desmontado');
+              return;
+            }
+            
+            safeSetState(setErrorMsg, `Erro ao salvar: ${backendError}`);
             toast.error(`Erro ao salvar: ${backendError}`);
         }
   };
@@ -595,20 +672,27 @@ const ProductForm: React.FC<ProductFormProps> = ({
   // Handler de Submissão - Definido uma vez
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
-    setErrorMsg(null);
-    setSuccessMsg(null);
-    setErrors({}); // Clear previous errors
+    
+    // Verificar se o componente ainda está montado
+    if (!isMounted.current) {
+      console.log('[ProductForm] Tentativa de submissão após desmontagem');
+      return;
+    }
+    
+    safeSetState(setErrorMsg, null);
+    safeSetState(setSuccessMsg, null);
+    safeSetState(setErrors, {}); // Clear previous errors
 
     if (!activeCompany?.id) {
         toast.error('Empresa ativa não encontrada. Faça login novamente.');
-        setErrorMsg('Empresa ativa não encontrada.');
+        safeSetState(setErrorMsg, 'Empresa ativa não encontrada.');
         return;
     }
 
     const isValid = validateForm(); // Re-validates and sets errors state
     if (!isValid) {
       console.error('[ProductForm] Erros de validação encontrados:', errors);
-      setErrorMsg('Verifique os erros no formulário.');
+      safeSetState(setErrorMsg, 'Verifique os erros no formulário.');
       toast.error('Existem erros no formulário.');
       return;
     }
@@ -617,19 +701,19 @@ const ProductForm: React.FC<ProductFormProps> = ({
     if (!isFieldDisabled('name')) {
         const { similars: finalSimilars, exact: finalExact } = await checkSimilarNamesAndExact(formData.name);
         if (finalExact) {
-            setHasExactName(true);
-            setErrorMsg('Já existe um produto cadastrado com este nome.');
-            setErrors(prev => ({...prev, name: 'Já existe um produto com este nome.'}));
+            safeSetState(setHasExactName, true);
+            safeSetState(setErrorMsg, 'Já existe um produto cadastrado com este nome.');
+            safeSetState(setErrors, prev => ({...prev, name: 'Já existe um produto com este nome.'}));
             toast.error('Nome de produto duplicado.');
             return;
         }
         if (finalSimilars.length > 0 && !pendingSubmit && !showSimilarAlert) { // Avoid re-prompting if alert already shown
-             setSimilarNames(finalSimilars);
-             setShowSimilarAlert(true);
-             setErrorMsg('Existem produtos com nomes parecidos. Confirme o cadastro.');
+             safeSetState(setSimilarNames, finalSimilars);
+             safeSetState(setShowSimilarAlert, true);
+             safeSetState(setErrorMsg, 'Existem produtos com nomes parecidos. Confirme o cadastro.');
              toast.warning('Produtos com nomes similares encontrados.');
              // Define the pending action
-             setPendingSubmit(() => () => executeSubmit(activeCompany.id));
+             safeSetState(setPendingSubmit, () => () => executeSubmit(activeCompany.id));
              return; // Wait for user confirmation
         }
     }
@@ -649,9 +733,9 @@ const ProductForm: React.FC<ProductFormProps> = ({
   }, [pendingSubmit]);
 
   const handleCancelSimilar = useCallback(() => {
-    setShowSimilarAlert(false);
-    setPendingSubmit(null);
-    setErrorMsg(null);
+    safeSetState(setShowSimilarAlert, false);
+    safeSetState(setPendingSubmit, null);
+    safeSetState(setErrorMsg, null);
   }, []);
 
   // Handlers para dias da semana
@@ -661,16 +745,16 @@ const ProductForm: React.FC<ProductFormProps> = ({
       const newState = { ...formData, [dayKey]: isChecked };
       const allIndividualDaysChecked = weekdays.every(day => toBoolean(newState[day.key]));
       newState.all_days = allIndividualDaysChecked;
-      setFormData(newState);
+      safeSetState(setFormData, newState);
        if (errors.monday) { // Assuming 'monday' holds the generic day error
-             setErrors(prev => { delete prev.monday; return {...prev}; });
+             safeSetState(setErrors, prev => { delete prev.monday; return {...prev}; });
        }
   }, [formData, errors, isFieldDisabled]); // Added isFieldDisabled dependency
 
   const handleAllDaysChange = useCallback((checked: boolean | string) => {
        if (isFieldDisabled('all_days')) return; // Safe check
        const isChecked = toBoolean(checked);
-       setFormData(prev => ({
+       safeSetState(setFormData, prev => ({
          ...prev,
          all_days: isChecked,
          monday: isChecked,
@@ -682,7 +766,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
          sunday: isChecked,
        }));
         if (errors.monday) {
-             setErrors(prev => { delete prev.monday; return {...prev}; });
+             safeSetState(setErrors, prev => { delete prev.monday; return {...prev}; });
         }
   }, [errors, isFieldDisabled]); // Added isFieldDisabled dependency
 
@@ -740,25 +824,19 @@ const ProductForm: React.FC<ProductFormProps> = ({
             <div>
                <Label htmlFor="product_type">Tipo *</Label>
                {!isProductTypeForced ? (
-                <Select
+                <select
+                  id="product_type"
+                  className={`w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background ${errors.product_type ? 'border-red-500' : ''}`}
+                  style={isFieldDisabled('product_type') ? disabledFieldStyle : undefined}
                   value={formData.product_type ?? ''}
-                  onValueChange={(value) => handleSelectChange('product_type', value as ProductType | null)}
+                  onChange={(e) => handleSelectChange('product_type', e.target.value as ProductType | null)}
                   disabled={isFieldDisabled('product_type') || isEditMode || isLoading}
                 >
-                  <SelectTrigger
-                    id="product_type"
-                    className={errors.product_type ? 'border-red-500' : ''}
-                    style={isFieldDisabled('product_type') ? disabledFieldStyle : undefined}
-                    disabled={isFieldDisabled('product_type') || isEditMode || isLoading}
-                  >
-                    <SelectValue placeholder="Selecione o tipo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="materia_prima">Matéria-prima</SelectItem>
-                    <SelectItem value="subreceita">Sub-receita</SelectItem>
-                    <SelectItem value="receita">Receita</SelectItem>
-                  </SelectContent>
-                </Select>
+                  <option value="">Selecione o tipo</option>
+                  <option value="materia_prima">Matéria-prima</option>
+                  <option value="subreceita">Sub-receita</option>
+                  <option value="receita">Receita</option>
+                </select>
                ) : (
                  <>
                    <Input value={forceProductType === 'materia_prima' ? 'Matéria-prima' : forceProductType === 'subreceita' ? 'Sub-receita' : 'Receita'} disabled readOnly />
@@ -778,11 +856,11 @@ const ProductForm: React.FC<ProductFormProps> = ({
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                           <div>
                               <Label htmlFor="pesoComprado">Peso Comprado (Kg) *</Label>
-                              <Input id="pesoComprado" name="pesoComprado" type="text" inputMode='decimal' value={pesoComprado} onChange={(e) => setPesoComprado(e.target.value)} placeholder='Ex: 10,5' disabled={isLoading} className={errors.cost ? 'border-red-500' : ''} />
+                              <Input id="pesoComprado" name="pesoComprado" type="text" inputMode='decimal' value={pesoComprado} onChange={(e) => safeSetState(setPesoComprado, e.target.value)} placeholder='Ex: 10,5' disabled={isLoading} className={errors.cost ? 'border-red-500' : ''} />
                           </div>
                           <div>
                               <Label htmlFor="valorPago">Valor Pago (R$) *</Label>
-                              <Input id="valorPago" name="valorPago" type="text" inputMode='decimal' value={valorPago} onChange={(e) => setValorPago(e.target.value)} placeholder='Ex: 50,00' disabled={isLoading} className={errors.cost ? 'border-red-500' : ''} />
+                              <Input id="valorPago" name="valorPago" type="text" inputMode='decimal' value={valorPago} onChange={(e) => safeSetState(setValorPago, e.target.value)} placeholder='Ex: 50,00' disabled={isLoading} className={errors.cost ? 'border-red-500' : ''} />
                           </div>
                           <div>
                               <Label>Custo Calculado (R$/Kg)</Label>
@@ -800,29 +878,39 @@ const ProductForm: React.FC<ProductFormProps> = ({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="group_id">Grupo</Label>
-                  <Select value={formData.group_id ?? ''} onValueChange={(value) => handleSelectChange('group_id', value)} disabled={isFieldDisabled('group_id') || isLoading}>
-                    <SelectTrigger id="group_id" className={errors.group_id ? 'border-red-500' : ''} style={isFieldDisabled('group_id') ? disabledFieldStyle : undefined} disabled={isFieldDisabled('group_id') || isLoading}>
-                      <SelectValue placeholder="Selecione o grupo" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Nenhum</SelectItem>
-                      {groups?.map((group) => ( <SelectItem key={group.id} value={group.id.toString()}> {group.name} </SelectItem> ))}
-                    </SelectContent>
-                  </Select>
+                  <select
+                    id="group_id"
+                    className={`w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background ${errors.group_id ? 'border-red-500' : ''}`}
+                    style={isFieldDisabled('group_id') ? disabledFieldStyle : undefined}
+                    value={formData.group_id ?? ''}
+                    onChange={(e) => handleSelectChange('group_id', e.target.value)}
+                    disabled={isFieldDisabled('group_id') || isLoading}
+                  >
+                    <option value="">Selecione o grupo</option>
+                    <option value="none">Nenhum</option>
+                    {groups?.map((group) => (
+                      <option key={group.id} value={group.id.toString()}>{group.name}</option>
+                    ))}
+                  </select>
                   {isFieldDisabled('group_id') && disabledFieldMessage}
                   {errors.group_id && <p className="text-red-500 text-xs mt-1">{errors.group_id}</p>}
                 </div>
                 <div>
                   <Label htmlFor="subgroup_id">Subgrupo</Label>
-                  <Select value={formData.subgroup_id ?? ''} onValueChange={(value) => handleSelectChange('subgroup_id', value)} disabled={isSubgroupDisabled || isLoading}>
-                    <SelectTrigger id="subgroup_id" className={errors.subgroup_id ? 'border-red-500' : ''} style={isSubgroupDisabled ? disabledFieldStyle : undefined} disabled={isSubgroupDisabled || isLoading}>
-                      <SelectValue placeholder={!formData.group_id ? "Selecione um grupo" : "Selecione o subgrupo"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Nenhum</SelectItem>
-                      {filteredSubgroups?.map((subgroup) => ( <SelectItem key={subgroup.id} value={subgroup.id.toString()}> {subgroup.name} </SelectItem> ))}
-                    </SelectContent>
-                  </Select>
+                  <select
+                    id="subgroup_id"
+                    className={`w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background ${errors.subgroup_id ? 'border-red-500' : ''}`}
+                    style={isSubgroupDisabled ? disabledFieldStyle : undefined}
+                    value={formData.subgroup_id ?? ''}
+                    onChange={(e) => handleSelectChange('subgroup_id', e.target.value)}
+                    disabled={isSubgroupDisabled || isLoading}
+                  >
+                    <option value="">{!formData.group_id ? "Selecione um grupo" : "Selecione o subgrupo"}</option>
+                    <option value="none">Nenhum</option>
+                    {filteredSubgroups?.map((subgroup) => (
+                      <option key={subgroup.id} value={subgroup.id.toString()}>{subgroup.name}</option>
+                    ))}
+                  </select>
                   {isFieldDisabled('subgroup_id') && disabledFieldMessage}
                   {errors.subgroup_id && <p className="text-red-500 text-xs mt-1">{errors.subgroup_id}</p>}
                 </div>
@@ -832,15 +920,19 @@ const ProductForm: React.FC<ProductFormProps> = ({
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <Label htmlFor="unit">Unidade de Venda *</Label>
-                  <Select name="unit" value={formData.unit ?? ''} onValueChange={(value) => handleSelectChange('unit', value as 'UN' | 'KG' | null)} disabled={isFieldDisabled('unit') || isLoading}>
-                    <SelectTrigger id="unit" className={errors.unit ? 'border-red-500' : ''} style={isFieldDisabled('unit') ? disabledFieldStyle : undefined} disabled={isFieldDisabled('unit') || isLoading}>
-                      <SelectValue placeholder="Selecione" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="UN">Unidade (UN)</SelectItem>
-                      <SelectItem value="Kg">Quilograma (Kg)</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <select
+                    id="unit"
+                    name="unit"
+                    className={`w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background ${errors.unit ? 'border-red-500' : ''}`}
+                    style={isFieldDisabled('unit') ? disabledFieldStyle : undefined}
+                    value={formData.unit ?? ''}
+                    onChange={(e) => handleSelectChange('unit', e.target.value as 'UN' | 'Kg' | null)}
+                    disabled={isFieldDisabled('unit') || isLoading}
+                  >
+                    <option value="">Selecione</option>
+                    <option value="UN">Unidade (UN)</option>
+                    <option value="Kg">Quilograma (Kg)</option>
+                  </select>
                   {isFieldDisabled('unit') && disabledFieldMessage}
                   {errors.unit && <p className="text-red-500 text-xs mt-1">{errors.unit}</p>}
                 </div>
@@ -920,7 +1012,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
                     {weekdays.map((day) => (
                       <div key={day.key} className="flex items-center space-x-2">
                         <Checkbox id={day.key} checked={toBoolean(formData[day.key])} onCheckedChange={(checked) => handleWeekdayChange(day.key, checked as boolean)} disabled={isLoading} />
-                        <Label htmlFor={day.key}>{day.label}</Label>
+                        <Label htmlFor={day.key}><span translate="no">{day.label}</span></Label>
                       </div>
                     ))}
                   </div>
@@ -934,33 +1026,39 @@ const ProductForm: React.FC<ProductFormProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <Label htmlFor="group_id">Grupo</Label>
-              <Select value={formData.group_id ?? ''} onValueChange={(value) => handleSelectChange('group_id', value)} disabled={isFieldDisabled('group_id') || isLoading}>
-                <SelectTrigger id="group_id" className={errors.group_id ? 'border-red-500' : ''} style={isFieldDisabled('group_id') ? disabledFieldStyle : undefined} disabled={isFieldDisabled('group_id') || isLoading}>
-                  <SelectValue placeholder="Selecione o grupo" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Nenhum</SelectItem>
-                  {groups?.map((group) => (
-                    <SelectItem key={group.id} value={group.id.toString()}>{group.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <select
+                id="group_id"
+                className={`w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background ${errors.group_id ? 'border-red-500' : ''}`}
+                style={isFieldDisabled('group_id') ? disabledFieldStyle : undefined}
+                value={formData.group_id ?? ''}
+                onChange={(e) => handleSelectChange('group_id', e.target.value)}
+                disabled={isFieldDisabled('group_id') || isLoading}
+              >
+                <option value="">Selecione o grupo</option>
+                <option value="none">Nenhum</option>
+                {groups?.map((group) => (
+                  <option key={group.id} value={group.id.toString()}>{group.name}</option>
+                ))}
+              </select>
               {isFieldDisabled('group_id') && disabledFieldMessage}
               {errors.group_id && <p className="text-red-500 text-xs mt-1">{errors.group_id}</p>}
             </div>
             <div>
               <Label htmlFor="subgroup_id">Subgrupo</Label>
-              <Select value={formData.subgroup_id ?? ''} onValueChange={(value) => handleSelectChange('subgroup_id', value)} disabled={isSubgroupDisabled || isLoading}>
-                <SelectTrigger id="subgroup_id" className={errors.subgroup_id ? 'border-red-500' : ''} style={isSubgroupDisabled ? disabledFieldStyle : undefined} disabled={isSubgroupDisabled || isLoading}>
-                  <SelectValue placeholder={!formData.group_id ? "Selecione um grupo" : "Selecione o subgrupo"} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Nenhum</SelectItem>
-                  {filteredSubgroups?.map((subgroup) => (
-                    <SelectItem key={subgroup.id} value={subgroup.id.toString()}>{subgroup.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <select
+                id="subgroup_id"
+                className={`w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background ${errors.subgroup_id ? 'border-red-500' : ''}`}
+                style={isSubgroupDisabled ? disabledFieldStyle : undefined}
+                value={formData.subgroup_id ?? ''}
+                onChange={(e) => handleSelectChange('subgroup_id', e.target.value)}
+                disabled={isSubgroupDisabled || isLoading}
+              >
+                <option value="">{!formData.group_id ? "Selecione um grupo" : "Selecione o subgrupo"}</option>
+                <option value="none">Nenhum</option>
+                {filteredSubgroups?.map((subgroup) => (
+                  <option key={subgroup.id} value={subgroup.id.toString()}>{subgroup.name}</option>
+                ))}
+              </select>
               {isFieldDisabled('subgroup_id') && disabledFieldMessage}
               {errors.subgroup_id && <p className="text-red-500 text-xs mt-1">{errors.subgroup_id}</p>}
             </div>
@@ -977,9 +1075,13 @@ const ProductForm: React.FC<ProductFormProps> = ({
             <Button type="button" variant="outline" onClick={onCancel} disabled={isLoading}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={isLoading || showSimilarAlert}>
-              {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            <Button 
+              type="submit" 
+              disabled={isLoading || showSimilarAlert}
+              className={`${isLoading ? 'bg-gray-500 cursor-not-allowed' : ''}`}
+            >
               {isEditMode ? 'Salvar Alterações' : 'Cadastrar Produto'}
+              {isLoading ? ' ...' : ''}
             </Button>
           </div>
         </CardContent>

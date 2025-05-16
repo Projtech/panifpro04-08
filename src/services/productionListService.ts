@@ -183,7 +183,8 @@ async function upsertDailyProductionList(
     const { data: deleteData, error: deleteError } = await supabase
       .from('production_list_items')
       .delete()
-      .eq('list_id', listId);
+      .eq('list_id', listId)
+      .eq('company_id', companyId);
 
     if (deleteError) {
       console.error(`[upsertDailyProductionList] ERRO ao deletar itens para listId ${listId}:`, deleteError);

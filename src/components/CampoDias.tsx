@@ -44,7 +44,7 @@ export const CampoDias: React.FC<CampoDiasProps> = ({
             onChange={e => onChange(dia.key, e.target.checked)}
             disabled={disabled}
           />
-          {dia.label}
+          <span translate="no">{dia.label}</span>
         </label>
       ))}
     </div>

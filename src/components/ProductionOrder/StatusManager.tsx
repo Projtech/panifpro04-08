@@ -12,6 +12,7 @@ interface StatusManagerProps {
   loading: boolean;
   orderRecipes: any[];
   onOpenMaterialsList: () => void;
+  onOpenPreWeighingList: () => void;
   onSave: () => void;
   onStatusUpdate: (status: OrderStatus) => void;
   navigateToConfirmation: () => void;
@@ -24,6 +25,7 @@ export default function StatusManager({
   loading,
   orderRecipes,
   onOpenMaterialsList,
+  onOpenPreWeighingList,
   onSave,
   onStatusUpdate,
   navigateToConfirmation
@@ -37,15 +39,27 @@ export default function StatusManager({
         </div>
         
         <div className="space-y-4">
-          <Button 
-            onClick={onOpenMaterialsList}
-            variant="outline" 
-            className="w-full"
-            disabled={orderRecipes.length === 0}
-          >
-            <List className="h-4 w-4 mr-2" />
-            Ver Lista de Materiais
-          </Button>
+          <div className="space-y-2">
+            <Button 
+              onClick={onOpenMaterialsList}
+              variant="outline" 
+              className="w-full"
+              disabled={orderRecipes.length === 0}
+            >
+              <List className="h-4 w-4 mr-2" />
+              Ver Lista de Materiais
+            </Button>
+
+            <Button 
+              onClick={onOpenPreWeighingList}
+              variant="outline" 
+              className="w-full"
+              disabled={orderRecipes.length === 0}
+            >
+              <List className="h-4 w-4 mr-2" />
+              Lista de Pré-Pesagem
+            </Button>
+          </div>
           
           {isEditing ? (
             <>
