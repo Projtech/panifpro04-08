@@ -848,227 +848,183 @@ const ProductForm: React.FC<ProductFormProps> = ({
                {errors.product_type && <p className="text-red-500 text-xs mt-1">{errors.product_type}</p>}
             </div>
           </div>
-           {/* Fields specific for Matéria Prima */}
-            {formData.product_type === 'materia_prima' && !isRecipeProduct && (
-               <Card className="bg-gray-50 p-4 mt-4">
-                  <CardHeader className="p-0 pb-2"><CardTitle className="text-base">Custo da Matéria Prima (por Kg)</CardTitle></CardHeader>
-                  <CardContent className="p-0">
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          <div>
-                              <Label htmlFor="pesoComprado">Peso Comprado (Kg) *</Label>
-                              <Input id="pesoComprado" name="pesoComprado" type="text" inputMode='decimal' value={pesoComprado} onChange={(e) => safeSetState(setPesoComprado, e.target.value)} placeholder='Ex: 10,5' disabled={isLoading} className={errors.cost ? 'border-red-500' : ''} />
-                          </div>
-                          <div>
-                              <Label htmlFor="valorPago">Valor Pago (R$) *</Label>
-                              <Input id="valorPago" name="valorPago" type="text" inputMode='decimal' value={valorPago} onChange={(e) => safeSetState(setValorPago, e.target.value)} placeholder='Ex: 50,00' disabled={isLoading} className={errors.cost ? 'border-red-500' : ''} />
-                          </div>
-                          <div>
-                              <Label>Custo Calculado (R$/Kg)</Label>
-                              <Input value={custoCalculado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} readOnly disabled className='bg-gray-200 font-semibold' />
-                              {errors.cost && <p className="text-red-500 text-xs mt-1">{errors.cost}</p>}
-                          </div>
+            {/* MATÉRIA PRIMA: Mostrar apenas os campos específicos */}
+            {formData.product_type === 'materia_prima' && (
+              <>
+                {/* Custo da Matéria Prima */}
+                {!isRecipeProduct && (
+                  <Card className="bg-gray-50 p-4 mt-4">
+                    <CardHeader className="p-0 pb-3">
+                      <CardTitle className="text-base font-medium">Custo da Matéria Prima (por Kg)</CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
+                        <div>
+                          <Label htmlFor="pesoComprado" className="mb-2 block">Peso Comprado (Kg) *</Label>
+                          <Input 
+                            id="pesoComprado" 
+                            name="pesoComprado" 
+                            type="text" 
+                            inputMode='decimal' 
+                            value={pesoComprado} 
+                            onChange={(e) => safeSetState(setPesoComprado, e.target.value)} 
+                            placeholder='Ex: 10,5' 
+                            disabled={isLoading} 
+                            className={`h-10 ${errors.cost ? 'border-red-500' : ''}`} 
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="valorPago" className="mb-2 block">Valor Pago (R$) *</Label>
+                          <Input 
+                            id="valorPago" 
+                            name="valorPago" 
+                            type="text" 
+                            inputMode='decimal' 
+                            value={valorPago} 
+                            onChange={(e) => safeSetState(setValorPago, e.target.value)} 
+                            placeholder='Ex: 50,00' 
+                            disabled={isLoading} 
+                            className={`h-10 ${errors.cost ? 'border-red-500' : ''}`} 
+                          />
+                        </div>
+                        <div>
+                          <Label className="mb-2 block">Custo Calculado (R$/Kg)</Label>
+                          <Input 
+                            value={custoCalculado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} 
+                            readOnly 
+                            disabled 
+                            className='bg-gray-200 font-semibold h-10' 
+                          />
+                          {errors.cost && <p className="text-red-500 text-xs mt-1">{errors.cost}</p>}
+                        </div>
                       </div>
-                   </CardContent>
-               </Card>
-           )}
+                    </CardContent>
+                  </Card>
+                )}
 
-          {(formData.product_type !== 'materia_prima') && (
-            <>
-              {/* Row 2: Group, Subgroup */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="group_id">Grupo</Label>
-                  <select
-                    id="group_id"
-                    className={`w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background ${errors.group_id ? 'border-red-500' : ''}`}
-                    style={isFieldDisabled('group_id') ? disabledFieldStyle : undefined}
-                    value={formData.group_id ?? ''}
-                    onChange={(e) => handleSelectChange('group_id', e.target.value)}
-                    disabled={isFieldDisabled('group_id') || isLoading}
-                  >
-                    <option value="">Selecione o grupo</option>
-                    <option value="none">Nenhum</option>
-                    {groups?.map((group) => (
-                      <option key={group.id} value={group.id.toString()}>{group.name}</option>
-                    ))}
-                  </select>
-                  {isFieldDisabled('group_id') && disabledFieldMessage}
-                  {errors.group_id && <p className="text-red-500 text-xs mt-1">{errors.group_id}</p>}
-                </div>
-                <div>
-                  <Label htmlFor="subgroup_id">Subgrupo</Label>
-                  <select
-                    id="subgroup_id"
-                    className={`w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background ${errors.subgroup_id ? 'border-red-500' : ''}`}
-                    style={isSubgroupDisabled ? disabledFieldStyle : undefined}
-                    value={formData.subgroup_id ?? ''}
-                    onChange={(e) => handleSelectChange('subgroup_id', e.target.value)}
-                    disabled={isSubgroupDisabled || isLoading}
-                  >
-                    <option value="">{!formData.group_id ? "Selecione um grupo" : "Selecione o subgrupo"}</option>
-                    <option value="none">Nenhum</option>
-                    {filteredSubgroups?.map((subgroup) => (
-                      <option key={subgroup.id} value={subgroup.id.toString()}>{subgroup.name}</option>
-                    ))}
-                  </select>
-                  {isFieldDisabled('subgroup_id') && disabledFieldMessage}
-                  {errors.subgroup_id && <p className="text-red-500 text-xs mt-1">{errors.subgroup_id}</p>}
-                </div>
-              </div>
-
-              {/* Row 3: Unit, Cost (if not MP), Price */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <Label htmlFor="unit">Unidade de Venda *</Label>
-                  <select
-                    id="unit"
-                    name="unit"
-                    className={`w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background ${errors.unit ? 'border-red-500' : ''}`}
-                    style={isFieldDisabled('unit') ? disabledFieldStyle : undefined}
-                    value={formData.unit ?? ''}
-                    onChange={(e) => handleSelectChange('unit', e.target.value as 'UN' | 'Kg' | null)}
-                    disabled={isFieldDisabled('unit') || isLoading}
-                  >
-                    <option value="">Selecione</option>
-                    <option value="UN">Unidade (UN)</option>
-                    <option value="Kg">Quilograma (Kg)</option>
-                  </select>
-                  {isFieldDisabled('unit') && disabledFieldMessage}
-                  {errors.unit && <p className="text-red-500 text-xs mt-1">{errors.unit}</p>}
-                </div>
-
-                <div>
-                  <Label htmlFor="cost">Custo *</Label>
-                  <Input id="cost" name="cost" type="text" inputMode='decimal' value={formData.cost ?? ''} onChange={handleChange} placeholder='Ex: 2.50' className={errors.cost ? 'border-red-500' : ''} disabled={isFieldDisabled('cost') || isLoading} style={isFieldDisabled('cost') ? disabledFieldStyle : undefined} />
-                  {isFieldDisabled('cost') && disabledFieldMessage}
-                  {errors.cost && <p className="text-red-500 text-xs mt-1">{errors.cost}</p>}
-                </div>
-
-                <div>
-                  <Label htmlFor="unit_price">Preço Venda ({formData.unit || 'UN'})</Label>
-                  <Input id="unit_price" name="unit_price" type="text" inputMode='decimal' value={formData.unit_price ?? ''} onChange={handleChange} placeholder='Ex: 5.99' className={errors.unit_price ? 'border-red-500' : ''} disabled={isFieldDisabled('unit_price') || isLoading} style={isFieldDisabled('unit_price') ? disabledFieldStyle : undefined} />
-                  {isFieldDisabled('unit_price') && disabledFieldMessage}
-                  {errors.unit_price && <p className="text-red-500 text-xs mt-1">{errors.unit_price}</p>}
-                </div>
-              </div>
-
-              {/* Row 4: Weights, SKU, Supplier */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <Label htmlFor="unit_weight">Peso por Unidade (Kg) *</Label>
-                  <Input id="unit_weight" name="unit_weight" type="text" inputMode='decimal' value={formData.unit_weight ?? ''} onChange={handleChange} placeholder='Ex: 0.550' className={errors.unit_weight ? 'border-red-500' : ''} disabled={isFieldDisabled('unit_weight') || isLoading} style={isFieldDisabled('unit_weight') ? disabledFieldStyle : undefined} />
-                  {isFieldDisabled('unit_weight') && disabledFieldMessage}
-                  {errors.unit_weight && <p className="text-red-500 text-xs mt-1">{errors.unit_weight}</p>}
-                </div>
-
-                <div>
-                  <Label htmlFor="sku">SKU</Label>
-                  <Input id="sku" name="sku" value={formData.sku ?? ''} onChange={handleChange} disabled={isFieldDisabled('sku') || isLoading} style={isFieldDisabled('sku') ? disabledFieldStyle : undefined} maxLength={50} />
-                  {isFieldDisabled('sku') && disabledFieldMessage}
-                </div>
-
-                <div>
-                  <Label htmlFor="supplier">Fornecedor</Label>
-                  <Input id="supplier" name="supplier" value={formData.supplier ?? ''} onChange={handleChange} disabled={isFieldDisabled('supplier') || isLoading} style={isFieldDisabled('supplier') ? disabledFieldStyle : undefined} maxLength={100} />
-                  {isFieldDisabled('supplier') && disabledFieldMessage}
-                </div>
-              </div>
-
-              {/* Row 5: Stock Levels */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <Label htmlFor="min_stock">Estoque Mínimo ({formData.unit || 'Unid.'})</Label>
-                  <Input id="min_stock" name="min_stock" type="number" step="0.001" min="0" value={formData.min_stock ?? ''} onChange={handleChange} disabled={isFieldDisabled('min_stock') || isLoading} style={isFieldDisabled('min_stock') ? disabledFieldStyle : undefined} />
-                  {isFieldDisabled('min_stock') && disabledFieldMessage}
-                  {errors.min_stock && <p className="text-red-500 text-xs mt-1">{errors.min_stock}</p>}
-                </div>
-
-                <div>
-                  <Label htmlFor="current_stock">Estoque Atual ({formData.unit || 'Unid.'})</Label>
-                  <Input id="current_stock" name="current_stock" type="number" step="0.001" value={formData.current_stock ?? ''} onChange={handleChange} disabled={isFieldDisabled('current_stock') || isLoading} style={isFieldDisabled('current_stock') ? disabledFieldStyle : undefined} />
-                  {isFieldDisabled('current_stock') && disabledFieldMessage}
-                  {errors.current_stock && <p className="text-red-500 text-xs mt-1">{errors.current_stock}</p>}
-                </div>
-
-                <div>
-                  <Label htmlFor="ativo">Produto Ativo?</Label>
-                  <div className="flex items-center pt-2">
-                    <Checkbox id="ativo" name="ativo" checked={formData.ativo} onCheckedChange={(checked) => handleSelectChange('ativo', checked ? 'true' : 'false')} disabled={isFieldDisabled('ativo') || isLoading} style={isFieldDisabled('ativo') ? disabledFieldStyle : undefined} />
-                    <Label htmlFor="ativo" className="ml-2">Sim</Label>
+                {/* Grupo e Subgrupo para Matéria Prima */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                  <div>
+                    <Label htmlFor="group_id">Grupo</Label>
+                    <select
+                      id="group_id"
+                      className={`w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background ${errors.group_id ? 'border-red-500' : ''}`}
+                      style={isFieldDisabled('group_id') ? disabledFieldStyle : undefined}
+                      value={formData.group_id ?? ''}
+                      onChange={(e) => handleSelectChange('group_id', e.target.value)}
+                      disabled={isFieldDisabled('group_id') || isLoading}
+                    >
+                      <option value="">Selecione o grupo</option>
+                      <option value="none">Nenhum</option>
+                      {groups?.map((group) => (
+                        <option key={group.id} value={group.id.toString()}>{group.name}</option>
+                      ))}
+                    </select>
+                    {isFieldDisabled('group_id') && disabledFieldMessage}
+                    {errors.group_id && <p className="text-red-500 text-xs mt-1">{errors.group_id}</p>}
                   </div>
-                  {isFieldDisabled('ativo') && disabledFieldMessage}
-                </div>
-              </div>
-
-              {/* Row 6: Production Days */}
-              <div className="space-y-2 pt-4">
-                <Label className={errors.monday ? 'text-red-500' : ''}>Dias de Produção</Label>
-                <div className={`flex flex-wrap gap-x-6 gap-y-2 items-center p-3 border rounded-md ${errors.monday ? 'border-red-500' : ''}`}>
-                  <div className="flex items-center space-x-2">
-                    <Checkbox id="all_days" checked={allWeekdaysChecked} onCheckedChange={handleAllDaysChange} disabled={isLoading} />
-                    <Label htmlFor="all_days" className="font-medium">Todos os dias</Label>
-                  </div>
-                  <div className="flex flex-wrap gap-x-4 gap-y-2">
-                    {weekdays.map((day) => (
-                      <div key={day.key} className="flex items-center space-x-2">
-                        <Checkbox id={day.key} checked={toBoolean(formData[day.key])} onCheckedChange={(checked) => handleWeekdayChange(day.key, checked as boolean)} disabled={isLoading} />
-                        <Label htmlFor={day.key}><span translate="no">{day.label}</span></Label>
-                      </div>
-                    ))}
+                  <div>
+                    <Label htmlFor="subgroup_id">Subgrupo</Label>
+                    <select
+                      id="subgroup_id"
+                      className={`w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background ${errors.subgroup_id ? 'border-red-500' : ''}`}
+                      style={isSubgroupDisabled ? disabledFieldStyle : undefined}
+                      value={formData.subgroup_id ?? ''}
+                      onChange={(e) => handleSelectChange('subgroup_id', e.target.value)}
+                      disabled={isSubgroupDisabled || isLoading}
+                    >
+                      <option value="">{!formData.group_id ? "Selecione um grupo" : "Selecione o subgrupo"}</option>
+                      <option value="none">Nenhum</option>
+                      {filteredSubgroups?.map((subgroup) => (
+                        <option key={subgroup.id} value={subgroup.id.toString()}>{subgroup.name}</option>
+                      ))}
+                    </select>
+                    {isFieldDisabled('subgroup_id') && disabledFieldMessage}
+                    {errors.subgroup_id && <p className="text-red-500 text-xs mt-1">{errors.subgroup_id}</p>}
                   </div>
                 </div>
-                {errors.monday && <p className="text-red-500 text-xs mt-1">{errors.monday}</p>}
+
+                {/* Produto Ativo para Matéria Prima */}
+                <div className="flex items-center space-x-2 mt-4">
+                  <Checkbox 
+                    id="ativo" 
+                    name="ativo" 
+                    checked={formData.ativo} 
+                    onCheckedChange={(checked) => handleSelectChange('ativo', checked ? 'true' : 'false')} 
+                    disabled={isFieldDisabled('ativo') || isLoading} 
+                    style={isFieldDisabled('ativo') ? disabledFieldStyle : undefined}
+                    className={formData.ativo ? 'bg-amber-500 text-white border-amber-500 hover:bg-amber-600 hover:text-white' : 'bg-white text-gray-500 border-gray-300'}
+                  />
+                  <Label htmlFor="ativo" className={formData.ativo ? 'text-amber-700 font-medium' : 'text-gray-500'}>Produto Ativo?</Label>
+                </div>
+              </>
+            )}
+
+            {/* SUBRECEITA E RECEITA: Mostrar apenas dias de produção e produto ativo */}
+            {(formData.product_type === 'subreceita' || formData.product_type === 'receita') && (
+              <div className="space-y-4">
+                {/* Dias de Produção */}
+                <div className="space-y-2 pt-4">
+                  <Label className={errors.monday ? 'text-red-500' : ''}>Dias de Produção</Label>
+                  <div className={`flex flex-wrap gap-x-6 gap-y-2 items-center p-3 border rounded-md ${errors.monday ? 'border-red-500' : ''}`}>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox 
+                        id="all_days" 
+                        checked={allWeekdaysChecked} 
+                        onCheckedChange={handleAllDaysChange} 
+                        disabled={isLoading}
+                        className={allWeekdaysChecked ? 'bg-amber-500 text-white border-amber-500 hover:bg-amber-600 hover:text-white' : 'bg-white text-gray-500 border-gray-300'}
+                      />
+                      <Label 
+                        htmlFor="all_days" 
+                        className={allWeekdaysChecked ? 'text-amber-700 font-medium' : 'text-gray-500'}
+                      >
+                        Todos os dias
+                      </Label>
+                    </div>
+                    <div className="flex flex-wrap gap-x-4 gap-y-2">
+                      {weekdays.map((day) => {
+                        const isChecked = toBoolean(formData[day.key]);
+                        return (
+                          <div key={day.key} className="flex items-center space-x-2">
+                            <Checkbox 
+                              id={day.key} 
+                              checked={isChecked} 
+                              onCheckedChange={(checked) => handleWeekdayChange(day.key, checked as boolean)} 
+                              disabled={isLoading}
+                              className={isChecked ? 'bg-amber-500 text-white border-amber-500 hover:bg-amber-600 hover:text-white' : 'bg-white text-gray-500 border-gray-300'}
+                            />
+                            <Label 
+                              htmlFor={day.key} 
+                              className={isChecked ? 'text-amber-700 font-medium' : 'text-gray-500'}
+                            >
+                              <span translate="no">{day.label}</span>
+                            </Label>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  {errors.monday && <p className="text-red-500 text-xs mt-1">{errors.monday}</p>}
+                </div>
+
+                {/* Produto Ativo */}
+                <div className="flex items-center space-x-2 mt-4">
+                  <Checkbox 
+                    id="ativo" 
+                    name="ativo" 
+                    checked={formData.ativo} 
+                    onCheckedChange={(checked) => handleSelectChange('ativo', checked ? 'true' : 'false')} 
+                    disabled={isFieldDisabled('ativo') || isLoading} 
+                    style={isFieldDisabled('ativo') ? disabledFieldStyle : undefined}
+                    className={formData.ativo ? 'bg-amber-500 text-white border-amber-500 hover:bg-amber-600 hover:text-white' : 'bg-white text-gray-500 border-gray-300'}
+                  />
+                  <Label htmlFor="ativo" className={formData.ativo ? 'text-amber-700 font-medium' : 'text-gray-500'}>Produto Ativo?</Label>
+                </div>
               </div>
-            </>
-          )}
+            )}
 
-          {/* Grupo e Subgrupo */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="group_id">Grupo</Label>
-              <select
-                id="group_id"
-                className={`w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background ${errors.group_id ? 'border-red-500' : ''}`}
-                style={isFieldDisabled('group_id') ? disabledFieldStyle : undefined}
-                value={formData.group_id ?? ''}
-                onChange={(e) => handleSelectChange('group_id', e.target.value)}
-                disabled={isFieldDisabled('group_id') || isLoading}
-              >
-                <option value="">Selecione o grupo</option>
-                <option value="none">Nenhum</option>
-                {groups?.map((group) => (
-                  <option key={group.id} value={group.id.toString()}>{group.name}</option>
-                ))}
-              </select>
-              {isFieldDisabled('group_id') && disabledFieldMessage}
-              {errors.group_id && <p className="text-red-500 text-xs mt-1">{errors.group_id}</p>}
-            </div>
-            <div>
-              <Label htmlFor="subgroup_id">Subgrupo</Label>
-              <select
-                id="subgroup_id"
-                className={`w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background ${errors.subgroup_id ? 'border-red-500' : ''}`}
-                style={isSubgroupDisabled ? disabledFieldStyle : undefined}
-                value={formData.subgroup_id ?? ''}
-                onChange={(e) => handleSelectChange('subgroup_id', e.target.value)}
-                disabled={isSubgroupDisabled || isLoading}
-              >
-                <option value="">{!formData.group_id ? "Selecione um grupo" : "Selecione o subgrupo"}</option>
-                <option value="none">Nenhum</option>
-                {filteredSubgroups?.map((subgroup) => (
-                  <option key={subgroup.id} value={subgroup.id.toString()}>{subgroup.name}</option>
-                ))}
-              </select>
-              {isFieldDisabled('subgroup_id') && disabledFieldMessage}
-              {errors.subgroup_id && <p className="text-red-500 text-xs mt-1">{errors.subgroup_id}</p>}
-            </div>
-          </div>
-
-          {/* Produto Ativo */}
-          <div className="flex items-center space-x-2 mt-4">
-            <Checkbox id="ativo" name="ativo" checked={formData.ativo} onCheckedChange={(checked) => handleSelectChange('ativo', checked ? 'true' : 'false')} disabled={isFieldDisabled('ativo') || isLoading} style={isFieldDisabled('ativo') ? disabledFieldStyle : undefined} />
-            <Label htmlFor="ativo">Produto Ativo?</Label>
-          </div>
+          {/* Espaço reservado para manter a estrutura do formulário */}
 
           {/* Action Buttons */}
           <div className="flex justify-end space-x-2 pt-6">

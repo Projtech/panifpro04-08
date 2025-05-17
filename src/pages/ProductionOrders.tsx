@@ -20,7 +20,9 @@ import {
   Search, 
   Eye, 
   MoreHorizontal,
-  Loader2
+  Loader2,
+  Printer,
+  List
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -216,6 +218,23 @@ export default function ProductionOrders() {
                             >
                               <Eye size={16} />
                             </Button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="sm" className="mr-2">
+                                  <Printer size={16} />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => navigate(`/production-orders/${order.id}/materials-list`)}>
+                                  <List className="h-4 w-4 mr-2" />
+                                  Ver Lista de Materiais
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => navigate(`/production-orders/${order.id}/pre-weighing-list`)}>
+                                  <List className="h-4 w-4 mr-2" />
+                                  Lista de Pré-Pesagem
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
                                 <Button variant="ghost" size="sm">

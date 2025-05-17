@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { toast } from "@/components/ui/use-toast";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { Loader2 } from "lucide-react";
@@ -13,6 +13,11 @@ import RecipeManager from "@/components/ProductionOrder/RecipeManager";
 import StatusManager from "@/components/ProductionOrder/StatusManager";
 import MaterialsCalculator from "@/components/ProductionOrder/MaterialsCalculator";
 import PreWeighingCalculator from "@/components/ProductionOrder/PreWeighingCalculator";
+
+interface ProductionOrderFormProps {
+  showMaterialsList?: boolean;
+  showPreWeighingList?: boolean;
+}
 
 
 
@@ -32,13 +37,12 @@ interface LocationState {
   preListName?: string; // Nome da pré-lista
 }
 
-export default function ProductionOrderForm() {
+export default function ProductionOrderForm({ showMaterialsList: initialShowMaterialsList, showPreWeighingList: initialShowPreWeighingList }: ProductionOrderFormProps = {}) {
   const { id } = useParams();
   const location = useLocation();
   const state = location.state as LocationState;
   const navigate = useNavigate();
 
-  // Pré-montar receitas se vieram produtos da pré-lista ou do calendário
   useEffect(() => {
     if (state?.produtos && state.produtos.length > 0 && setOrderRecipes) {
       console.log("Produtos recebidos na tela de pedido:", state.produtos);
@@ -116,8 +120,15 @@ export default function ProductionOrderForm() {
     calendarItems: state?.calendarItems,
     calendarDate: state?.calendarDate
   });
+  
+  // Se initialShowMaterialsList for true, definimos showMaterialsList como true
+  useEffect(() => {
+    if (initialShowMaterialsList && id) {
+      setShowMaterialsList(true);
+    }
+  }, [initialShowMaterialsList, id, setShowMaterialsList]);
 
-  const [showPreWeighingList, setShowPreWeighingList] = useState(false);
+  const [showPreWeighingList, setShowPreWeighingList] = useState(initialShowPreWeighingList || false);
   const [preWeighingData, setPreWeighingData] = useState<{ subRecipes: any[], rawMaterials: any[] }>({ subRecipes: [], rawMaterials: [] });
   const [loadingPreWeighing, setLoadingPreWeighing] = useState(false);
 
@@ -248,6 +259,26 @@ export default function ProductionOrderForm() {
       setLoadingPreWeighing(false);
     }
   }, [orderRecipes, recipes]);
+  
+  // Efeito para abrir automaticamente as listas quando solicitado via props
+  // Usando uma ref para controlar se já executamos este efeito
+  const initialRenderRef = useRef({
+    materialsList: false,
+    preWeighingList: false
+  });
+  
+  useEffect(() => {
+    // Só executa na primeira renderização para evitar loops infinitos
+    if (initialShowMaterialsList && id && !initialRenderRef.current.materialsList) {
+      initialRenderRef.current.materialsList = true;
+      openMaterialsList();
+    }
+    
+    if (initialShowPreWeighingList && id && !initialRenderRef.current.preWeighingList) {
+      initialRenderRef.current.preWeighingList = true;
+      calculatePreWeighing();
+    }
+  }, [initialShowMaterialsList, initialShowPreWeighingList, id]);
 
   return (
     <div className="animate-fade-in">

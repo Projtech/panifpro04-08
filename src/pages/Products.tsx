@@ -73,6 +73,17 @@ function Products() {
   const [groups, setGroups] = useState<Group[]>([]);
   const [subgroups, setSubgroups] = useState<Subgroup[]>([]);
   const [filteredSubgroups, setFilteredSubgroups] = useState<Subgroup[]>([]);
+  
+  // Filtros de tipo de produto
+  const [typeFilters, setTypeFilters] = useState({
+    materiaPrima: true,
+    subReceita: true,
+    receita: true
+  });
+
+  // Filtro de status (ativo/inativo)
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  
   const navigate = useNavigate();
   const location = useLocation();
   
@@ -188,12 +199,31 @@ function Products() {
   }, [selectedProduct, subgroups]);
 
   const filteredProducts = products
-    .filter(product =>
-      product.name.toLowerCase().includes(search.toLowerCase()) ||
-      (product.sku && product.sku.toLowerCase().includes(search.toLowerCase())) ||
-      product.supplier.toLowerCase().includes(search.toLowerCase())
-    )
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .filter(product => {
+      // Filtro de texto
+      const textMatch = 
+        (product.name ? product.name.toLowerCase().includes(search.toLowerCase()) : false) ||
+        (product.sku && product.sku.toLowerCase().includes(search.toLowerCase())) ||
+        (product.supplier ? product.supplier.toLowerCase().includes(search.toLowerCase()) : false);
+      
+      // Filtro por tipo de produto
+      const typeMatch = (
+        (product.product_type === 'materia_prima' && typeFilters.materiaPrima) ||
+        (product.product_type === 'subreceita' && typeFilters.subReceita) ||
+        (product.product_type === 'receita' && typeFilters.receita) ||
+        // Se product_type for null ou indefinido, mostrar em todos os filtros
+        (!product.product_type && (typeFilters.materiaPrima || typeFilters.subReceita || typeFilters.receita))
+      );
+      
+      // Filtro por status (ativo/inativo)
+      const statusMatch = 
+        statusFilter === 'all' || 
+        (statusFilter === 'active' && product.ativo !== false) || 
+        (statusFilter === 'inactive' && product.ativo === false);
+      
+      return textMatch && typeMatch && statusMatch;
+    })
+    .sort((a, b) => a.name ? (b.name ? a.name.localeCompare(b.name) : -1) : 1);
 
   const handleEditOpen = (product: Product) => {
     setSelectedProduct(product);
@@ -254,61 +284,143 @@ function Products() {
       <div className="animate-fade-in">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold text-bakery-brown">Produtos</h1>
-          <Input
-            type="search"
-            placeholder="Buscar produto..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="max-w-md"
-          />
         </div>
         <Card>
-          <div className="flex items-center justify-between p-6 pb-0">
-            <div>
+          <div className="p-6 pb-3">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-4">
               <h2 className="text-xl font-semibold text-bakery-brown">Lista de Produtos</h2>
+              
+              <div className="flex flex-1 flex-wrap items-center gap-4">
+                {/* Filtros de tipo */}
+                <div className="flex items-center gap-4 flex-wrap">
+                  {/* Filtro por status (ativo/inativo) */}
+                  <div className="flex items-center space-x-2">
+                    <Select
+                      value={statusFilter}
+                      onValueChange={(value: 'all' | 'active' | 'inactive') => setStatusFilter(value)}
+                    >
+                      <SelectTrigger className="w-[140px] h-9">
+                        <SelectValue placeholder="Status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos</SelectItem>
+                        <SelectItem value="active">Ativos</SelectItem>
+                        <SelectItem value="inactive">Inativos</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  {/* Filtro por tipo */}
+                  <div className="flex items-center space-x-2">
+                    <Checkbox 
+                      id="filter-materia-prima" 
+                      checked={typeFilters.materiaPrima}
+                      onCheckedChange={(checked) => 
+                        setTypeFilters(prev => ({ ...prev, materiaPrima: checked === true }))
+                      }
+                    />
+                    <label 
+                      htmlFor="filter-materia-prima" 
+                      className="text-sm font-medium leading-none cursor-pointer"
+                    >
+                      Matéria Prima
+                    </label>
+                  </div>
+                  
+                  <div className="flex items-center space-x-2">
+                    <Checkbox 
+                      id="filter-subreceita" 
+                      checked={typeFilters.subReceita}
+                      onCheckedChange={(checked) => 
+                        setTypeFilters(prev => ({ ...prev, subReceita: checked === true }))
+                      }
+                    />
+                    <label 
+                      htmlFor="filter-subreceita" 
+                      className="text-sm font-medium leading-none cursor-pointer"
+                    >
+                      SubReceita
+                    </label>
+                  </div>
+                  
+                  <div className="flex items-center space-x-2">
+                    <Checkbox 
+                      id="filter-receita" 
+                      checked={typeFilters.receita}
+                      onCheckedChange={(checked) => 
+                        setTypeFilters(prev => ({ ...prev, receita: checked === true }))
+                      }
+                    />
+                    <label 
+                      htmlFor="filter-receita" 
+                      className="text-sm font-medium leading-none cursor-pointer"
+                    >
+                      Receita
+                    </label>
+                  </div>
+                </div>
+                
+                {/* Campo de busca */}
+                <div className="flex-1 min-w-[200px]">
+                  <Input
+                    type="search"
+                    placeholder="Buscar produto..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="w-full"
+                  />
+                </div>
+                
+                {/* Botão de atualização */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRefresh}
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4" />
+                  )}
+                  <span className="ml-2">Atualizar</span>
+                </Button>
+              </div>
+            </div>
+            
+            <div className="flex items-center justify-between mt-2">
               <p className="text-sm text-gray-500">
                 Última atualização: {lastUpdated.toLocaleTimeString()}
               </p>
+              
+              <div className="flex items-center gap-2">
+                {returnToRecipe && (
+                  <Button 
+                    variant="outline" 
+                    className="bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-200"
+                    onClick={() => {
+                      // Navegar de volta para a tela de receitas
+                      if (recipeId) {
+                        navigate(`/recipes/${recipeId}/edit`, { 
+                          state: { fromProductCreation: true } 
+                        });
+                      } else {
+                        navigate(`/recipes/new`, { 
+                          state: { fromProductCreation: true } 
+                        });
+                      }
+                    }}
+                  >
+                    <ArrowLeft className="h-4 w-4 mr-2" />
+                    Voltar para Receita
+                  </Button>
+                )}
+                <Button disabled={loading} onClick={() => navigate("/produtos/novo")}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Adicionar Produto
+                </Button>
+              </div>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleRefresh}
-              disabled={loading}
-              className="mr-2"
-            >
-              {loading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4" />
-              )}
-              <span className="ml-2">Atualizar</span>
-            </Button>
-            {returnToRecipe && (
-              <Button 
-                variant="outline" 
-                className="mr-2 bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-200"
-                onClick={() => {
-                  // Navegar de volta para a tela de receitas
-                  if (recipeId) {
-                    navigate(`/recipes/${recipeId}/edit`, { 
-                      state: { fromProductCreation: true } 
-                    });
-                  } else {
-                    navigate(`/recipes/new`, { 
-                      state: { fromProductCreation: true } 
-                    });
-                  }
-                }}
-              >
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Voltar para Receita
-              </Button>
-            )}
-            <Button disabled={loading} onClick={() => navigate("/produtos/novo")}>
-              <Plus className="h-4 w-4 mr-2" />
-              Adicionar Produto
-            </Button>
           </div>
 
           <div className="overflow-x-auto max-h-[600px]">

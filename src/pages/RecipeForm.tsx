@@ -731,74 +731,62 @@ export default function RecipeForm() {
       <div className="grid grid-cols-1 gap-6 px-1">
         <div className="w-full">
           <Card className="mb-6">
-            <div className="p-6">
-              <h2 className="text-xl font-semibold text-bakery-brown mb-4">Informações Gerais</h2>
+            <div className="p-4">
+              <h2 className="text-lg font-semibold text-bakery-brown mb-3">Informações Gerais</h2>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label htmlFor="name" className="form-label">Nome da Receita <span className="text-red-500">*</span></label>
-                    <div className="flex items-center space-x-2">
-                      <Checkbox 
-                        id="isSubProduct" 
-                        checked={recipeForm.isSubProduct}
-                        onCheckedChange={handleCheckboxChange}
-                      />
-                      <label 
-                        htmlFor="isSubProduct" 
-                        className="text-sm font-medium leading-none cursor-pointer"
-                      >
-                        É um SubReceita
-                      </label>
-                    </div>
-                  </div>
+              <div className="flex items-center justify-end mb-2">
+                <div className="flex items-center space-x-2">
+                  <Checkbox 
+                    id="isSubProduct" 
+                    checked={recipeForm.isSubProduct}
+                    onCheckedChange={handleCheckboxChange}
+                  />
+                  <label 
+                    htmlFor="isSubProduct" 
+                    className="text-sm font-medium leading-none cursor-pointer"
+                  >
+                    É um SubReceita
+                  </label>
+                </div>
+              </div>
+              
+              {/* Primeira linha: Nome, Rendimento kg e Rendimento unidades */}
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-3 mb-3">
+                <div className="md:col-span-6 space-y-1">
+                  <label htmlFor="name" className="form-label text-sm">Nome da Receita <span className="text-red-500">*</span></label>
                   <Autocomplete
                     id="name"
                     name="name"
                     value={recipeForm.name}
                     onChange={handleInputChange}
                     required
-                    className={`form-input ${fieldErrors.name ? 'border-red-500 ring-red-500' : ''}`}
+                    className={`form-input h-9 ${fieldErrors.name ? 'border-red-500 ring-red-500' : ''}`}
                     suggestions={existingRecipes.map(recipe => recipe.name)}
                     onSelect={(value) => {
-                      // Only update if the value is different from current
                       if (recipeForm.name !== value) {
                         setRecipeForm(prev => ({ ...prev, name: value }));
-                        // Clear the error for this field if it was previously set
                         setFieldErrors(prev => ({ ...prev, name: false }));
                       }
                     }}
                   />
                 </div>
                 
-                <div className="space-y-2">
-                  <label htmlFor="code" className="form-label">Código/Identificador</label>
-                  <Input
-                    id="code"
-                    name="code"
-                    value={recipeForm.isSubProduct ? 'SUB' : recipeForm.code}
-                    onChange={handleInputChange}
-                    className="form-input"
-                    disabled={recipeForm.isSubProduct}
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <label htmlFor="yieldKg" className="form-label">Rendimento (kg) <span className="text-red-500">*</span></label>
+                <div className="md:col-span-3 space-y-1">
+                  <label htmlFor="yieldKg" className="form-label text-sm">Rendimento (kg) <span className="text-red-500">*</span></label>
                   <Input
                     id="yieldKg"
                     name="yieldKg"
-                    type="text" // Permitir qualquer caractere
-                    value={recipeForm.yieldKg} // Usar diretamente a string do estado
+                    type="text"
+                    value={recipeForm.yieldKg}
                     onChange={handleInputChange}
                     required
                     placeholder="Ex: 2,5"
-                    className={`form-input ${fieldErrors.yieldKg ? 'border-red-500 ring-red-500' : ''}`}
+                    className={`form-input h-9 ${fieldErrors.yieldKg ? 'border-red-500 ring-red-500' : ''}`}
                   />
                 </div>
                 
-                <div className="space-y-2">
-                  <label htmlFor="yieldUnits" className="form-label">Rendimento (unidades)</label>
+                <div className="md:col-span-3 space-y-1">
+                  <label htmlFor="yieldUnits" className="form-label text-sm">Rendimento (un.)</label>
                   <Input
                     id="yieldUnits"
                     name="yieldUnits"
@@ -807,12 +795,27 @@ export default function RecipeForm() {
                     min="0"
                     value={recipeForm.yieldUnits || ''}
                     onChange={handleInputChange}
-                    className="form-input"
+                    className="form-input h-9"
+                  />
+                </div>
+              </div>
+              
+              {/* Segunda linha: Código, Grupo e Subgrupo */}
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+                <div className="md:col-span-4 space-y-1">
+                  <label htmlFor="code" className="form-label text-sm">Código/Identificador</label>
+                  <Input
+                    id="code"
+                    name="code"
+                    value={recipeForm.isSubProduct ? 'SUB' : recipeForm.code}
+                    onChange={handleInputChange}
+                    className="form-input h-9"
+                    disabled={recipeForm.isSubProduct}
                   />
                 </div>
                 
-                <div className="space-y-2">
-                  <label htmlFor="group_id" className="form-label">Grupo</label>
+                <div className="md:col-span-4 space-y-1">
+                  <label htmlFor="group_id" className="form-label text-sm">Grupo</label>
                   <select
                     id="group_id"
                     name="group_id"
@@ -820,7 +823,7 @@ export default function RecipeForm() {
                     onChange={(e) => {
                       handleInputChange(e);
                     }}
-                    className="w-full flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="w-full flex h-9 rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <option value="">Selecione um grupo</option>
                     {groups.map((group) => (
@@ -831,15 +834,15 @@ export default function RecipeForm() {
                   </select>
                 </div>
                 
-                <div className="space-y-2">
-                  <label htmlFor="subgroup_id" className="form-label">Subgrupo</label>
+                <div className="md:col-span-4 space-y-1">
+                  <label htmlFor="subgroup_id" className="form-label text-sm">Subgrupo</label>
                   <select
                     id="subgroup_id"
                     name="subgroup_id"
                     value={recipeForm.subgroup_id || ''}
                     onChange={handleInputChange}
                     disabled={!recipeForm.group_id}
-                    className="w-full flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="w-full flex h-9 rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <option value="">Selecione um subgrupo</option>
                     {filteredSubgroups.map((subgroup) => (
@@ -864,18 +867,20 @@ export default function RecipeForm() {
                 </TabsList>
               </div>
               
-              <TabsContent value="ingredients" className="p-6 mt-0">
-                <div className="mb-6 border-b pb-6">
+              <TabsContent value="ingredients" className="p-6 mt-0 relative">
+                <div className="absolute right-6 top-6 z-10">
+                  <Button 
+                    variant="outline" 
+                    className="bg-green-50 hover:bg-green-100 text-green-700 border-green-200"
+                    onClick={handleNavigateToNewProduct}
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Cadastrar Nova Matéria Prima
+                  </Button>
+                </div>
+                <div className="mb-6 border-b pb-6 mt-12">
                   <div className="flex justify-between items-center mb-4">
                     <h3 className="text-lg font-medium text-bakery-brown">Adicionar Ingrediente</h3>
-                    <Button 
-                      variant="outline" 
-                      className="bg-green-50 hover:bg-green-100 text-green-700 border-green-200"
-                      onClick={handleNavigateToNewProduct}
-                    >
-                      <Plus className="h-4 w-4 mr-2" />
-                      Cadastrar Nova Matéria Prima
-                    </Button>
                   </div>
                   
                   <div className="flex flex-col md:flex-row gap-3 mb-4 items-end">
@@ -888,7 +893,7 @@ export default function RecipeForm() {
                         name="etapa"
                         value={newIngredient.etapa ?? ''}
                         onChange={(e) => setNewIngredient(prev => ({ ...prev, etapa: e.target.value }))}
-                        className="w-full flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="w-full flex h-9 rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         <option value="">Selecione a etapa (opcional)</option>
                         <option value="massa">Massa</option>
@@ -907,7 +912,7 @@ export default function RecipeForm() {
                         name="ingredientType"
                         value={newIngredient.isSubRecipe ? 'sub-product' : 'raw-material'}
                         onChange={(e) => handleProductTypeChange(e.target.value)}
-                        className="w-full flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="w-full flex h-9 rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         <option value="raw-material">Matéria Prima</option>
                         <option value="sub-product">SubReceita</option>
@@ -920,7 +925,7 @@ export default function RecipeForm() {
                         <div className="relative">
                           <Input
                             type="text"
-                            className="form-input"
+                            className="form-input h-9"
                             placeholder="Digite para buscar uma SubReceita"
                             value={newIngredient.productName || ''}
                             onChange={(e) => {
@@ -973,7 +978,7 @@ export default function RecipeForm() {
                         <div className="relative">
                           <Input
                             type="text"
-                            className="form-input"
+                            className="form-input h-9"
                             placeholder="Digite para buscar uma matéria prima"
                             value={newIngredient.productName || ''}
                             onChange={(e) => {
@@ -1035,7 +1040,7 @@ export default function RecipeForm() {
                         value={newIngredient.quantity || ''}
                         onChange={handleIngredientChange}
                         placeholder="Ex: 0,750"
-                        className={`form-input ${fieldErrors.quantity ? 'border-red-500 ring-red-500' : ''}`}
+                        className={`form-input h-9 ${fieldErrors.quantity ? 'border-red-500 ring-red-500' : ''}`}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
                             e.preventDefault(); // evita submit do form
@@ -1044,16 +1049,17 @@ export default function RecipeForm() {
                         }}
                       />
                     </div>
-                  </div>
-                  <div className="flex justify-end">
-                    <Button 
-                      onClick={addIngredient} 
-                      className="bg-bakery-amber hover:bg-bakery-brown text-white"
-                      disabled={(!newIngredient.productId && !newIngredient.subRecipeId) || !newIngredient.quantity}
-                    >
-                      <Plus className="h-4 w-4 mr-2" />
-                      Adicionar
-                    </Button>
+                    {/* Botão Adicionar */}
+                    <div className="flex-0 mt-6">
+                      <Button 
+                        onClick={addIngredient} 
+                        className="bg-bakery-amber hover:bg-bakery-brown text-white h-9"
+                        disabled={(!newIngredient.productId && !newIngredient.subRecipeId) || !newIngredient.quantity}
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        Adicionar
+                      </Button>
+                    </div>
                   </div>
                 </div>
                 
@@ -1066,7 +1072,7 @@ export default function RecipeForm() {
                 </div>
                 
                 <div className="overflow-x-auto">
-                  <Table>
+                  <Table className="[&_tr]:h-auto [&_td]:py-1 [&_th]:py-1 text-sm">
                     <TableHeader>
                       <TableRow>
                         <TableHead style={{ width: '15ch', minWidth: '10ch' }}>Etapa</TableHead>
@@ -1074,8 +1080,6 @@ export default function RecipeForm() {
                         <TableHead style={{ minWidth: '180px' }}>Ingrediente</TableHead>
                         <TableHead style={{ width: '10ch', minWidth: '8ch' }}>Qtd.</TableHead>
                         <TableHead style={{ width: '8ch' }}>Un.</TableHead>
-                        <TableHead style={{ width: '10ch' }}>Custo Unit.</TableHead>
-                        <TableHead style={{ width: '12ch' }}>Custo Total</TableHead>
                         <TableHead className="w-16"></TableHead>
                       </TableRow>
                     </TableHeader>
@@ -1088,37 +1092,35 @@ export default function RecipeForm() {
                             <TableCell className="font-medium whitespace-nowrap overflow-hidden text-ellipsis max-w-xs" style={{ maxWidth: 260 }}>{ing.productName}</TableCell>
                             <TableCell className="text-right" style={{ fontVariantNumeric: 'tabular-nums' }}>{ing.quantity.toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })}</TableCell>
                             <TableCell>{ing.unit}</TableCell>
-                            <TableCell>R$ {ing.cost.toFixed(2)}</TableCell>
-                            <TableCell>R$ {ing.totalCost.toFixed(2)}</TableCell>
-                            <TableCell className="flex flex-col gap-1 items-center">
+                            <TableCell className="flex flex-row gap-1 items-center justify-center">
                               <Button 
                                 variant="ghost" 
-                                size="sm" 
-                                className="text-gray-500 hover:text-bakery-brown p-1"
+                                size="icon" 
+                                className="text-gray-500 hover:text-bakery-brown p-1 h-6 w-6"
                                 onClick={() => moveIngredientUp(idx)}
                                 disabled={idx === 0}
                                 title="Mover para cima"
                               >
-                                <span style={{fontSize: '1.2em', lineHeight: 1}}>&uarr;</span>
+                                <span style={{fontSize: '1em', lineHeight: 1}}>&uarr;</span>
                               </Button>
                               <Button 
                                 variant="ghost" 
-                                size="sm" 
-                                className="text-gray-500 hover:text-bakery-brown p-1"
+                                size="icon" 
+                                className="text-gray-500 hover:text-bakery-brown p-1 h-6 w-6"
                                 onClick={() => moveIngredientDown(idx)}
                                 disabled={idx === ingredients.length - 1}
                                 title="Mover para baixo"
                               >
-                                <span style={{fontSize: '1.2em', lineHeight: 1}}>&darr;</span>
+                                <span style={{fontSize: '1em', lineHeight: 1}}>&darr;</span>
                               </Button>
                               <Button 
                                 variant="ghost" 
-                                size="sm" 
-                                className="text-red-500 hover:text-red-700 mt-1" 
+                                size="icon" 
+                                className="text-red-500 hover:text-red-700 h-6 w-6" 
                                 onClick={() => removeIngredient(ing.id)}
                                 title="Remover"
                               >
-                                <Trash size={16} />
+                                <Trash size={14} />
                               </Button>
                             </TableCell>
                           </TableRow>

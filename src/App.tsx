@@ -198,6 +198,22 @@ const App = () => {
                 </ProtectedRoute>
               } />
               
+              <Route path="/production-orders/:id/materials-list" element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <ProductionOrderForm showMaterialsList={true} />
+                  </AppLayout>
+                </ProtectedRoute>
+              } />
+              
+              <Route path="/production-orders/:id/pre-weighing-list" element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <ProductionOrderForm showPreWeighingList={true} />
+                  </AppLayout>
+                </ProtectedRoute>
+              } />
+              
               <Route path="/production-confirmation" element={
                 <ProtectedRoute>
                   <AppLayout>
