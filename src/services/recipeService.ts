@@ -334,13 +334,26 @@ export async function createRecipe(recipe: Omit<Recipe, 'id'>, ingredients: Omit
       // Create or update linked product
       if (!existingProduct) {
         // Create new product linked to recipe
-        const isSubRecipe = processedRecipe.code === 'SUB';
+        const isSubRecipe = processedRecipe.code?.startsWith('SUB');
         // Determina a unidade final do PRODUTO
         const finalUnit = isSubRecipe ? 'Kg' : (processedRecipe.yield_units && processedRecipe.yield_units > 0 ? 'UN' : 'Kg');
+        // Garante que yield_kg tenha um valor válido para subreceitas
+        if (isSubRecipe && (!processedRecipe.yield_kg || processedRecipe.yield_kg <= 0)) {
+          console.warn("Peso da subreceita não definido. Usando 1kg como padrão.");
+          processedRecipe.yield_kg = 1;
+          
+          // Atualiza o yield_kg na receita no banco de dados
+          await supabase
+            .from('recipes')
+            .update({ yield_kg: 1 })
+            .eq('id', processedRecipe.id)
+            .eq('company_id', companyId);
+        }
+        
         // Calcula pesos
         const calculatedUnitWeight = (finalUnit === 'UN' && processedRecipe.yield_units && processedRecipe.yield_units > 0 && processedRecipe.yield_kg)
-                                   ? (processedRecipe.yield_kg / processedRecipe.yield_units)
-                                   : null;
+                                    ? (processedRecipe.yield_kg / processedRecipe.yield_units)
+                                    : null;
         const calculatedKgWeight = (finalUnit === 'Kg') ? processedRecipe.yield_kg : null;
         // Determina o custo correto baseado na unidade final
         const finalCost = finalUnit === 'UN' ? processedRecipe.cost_per_unit : processedRecipe.cost_per_kg;
@@ -350,8 +363,8 @@ export async function createRecipe(recipe: Omit<Recipe, 'id'>, ingredients: Omit
           product_type: isSubRecipe ? 'subreceita' : 'receita',
           unit: finalUnit,
           cost: finalCost ?? 0,
-          unit_weight: calculatedUnitWeight,
-          kg_weight: calculatedKgWeight,
+          unit_weight: isSubRecipe ? null : calculatedUnitWeight, // Subreceitas não usam unit_weight
+          kg_weight: isSubRecipe ? processedRecipe.yield_kg : calculatedKgWeight, // Garantir que kg_weight seja definido para subreceitas
           recipe_id: processedRecipe.id,
           group_id: processedRecipe.group_id || null,
           subgroup_id: processedRecipe.subgroup_id || null,
@@ -360,7 +373,7 @@ export async function createRecipe(recipe: Omit<Recipe, 'id'>, ingredients: Omit
           supplier: 'Produção Interna',
           min_stock: 0,
           current_stock: 0,
-          unit_price: 0,
+          unit_price: isSubRecipe ? null : 0, // Subreceitas não usam unit_price
           ativo: true
         };
 
@@ -457,7 +470,7 @@ export async function updateRecipe(
         console.error("Erro ao buscar produto vinculado:", productQueryError);
         toast.error("Erro ao buscar produto vinculado para atualização.");
       } else {
-        const isSubRecipe = recipeData.code === 'SUB';
+        const isSubRecipe = recipeData.code && recipeData.code.startsWith('SUB');
         const finalUnit = isSubRecipe ? 'Kg' : (recipeData.yield_units && recipeData.yield_units > 0 ? 'UN' : 'Kg');
         const calculatedUnitWeight = (finalUnit === 'UN' && recipeData.yield_units && recipeData.yield_units > 0 && recipeData.yield_kg)
                                    ? (recipeData.yield_kg / recipeData.yield_units)
@@ -484,11 +497,40 @@ export async function updateRecipe(
           // Atualiza o produto existente
           console.log("Atualizando produto vinculado:", linkedProduct.id);
           try {
+            // Garante que os campos de peso estejam corretamente definidos para subreceitas
+            if (isSubRecipe) {
+              // Para subreceitas, garantimos que o kg_weight esteja definido
+              productPayload.kg_weight = recipeData.yield_kg || 1; // Usa 1 como padrão se não definido
+              productPayload.unit = 'Kg'; // Subreceitas sempre usam Kg
+              productPayload.unit_weight = null; // Limpa o peso unitário
+              
+              // Se não houver yield_kg definido, usamos 1 como padrão para evitar erros
+              if (!productPayload.kg_weight || productPayload.kg_weight <= 0) {
+                productPayload.kg_weight = 1;
+                console.warn("Peso da subreceita não definido. Usando 1kg como padrão.");
+                
+                // Garante que yield_kg esteja definido na receita também
+                if (recipeData.yield_kg <= 0) {
+                  // Atualiza o yield_kg na receita no banco de dados
+                  await supabase
+                    .from('recipes')
+                    .update({ yield_kg: 1 })
+                    .eq('id', recipeData.id)
+                    .eq('company_id', companyId);
+                  
+                  // Atualiza também no objeto local
+                  recipeData.yield_kg = 1;
+                }
+              }
+            }
+            
             await updateProduct(linkedProduct.id, productPayload, companyId);
             console.log("Produto vinculado atualizado com sucesso:", linkedProduct.id);
           } catch (updateError) {
             console.error("Erro ao atualizar produto vinculado:", updateError);
-            toast.error("Receita atualizada, mas falha ao atualizar produto associado.");
+            // Mostra o erro específico ao usuário
+            const errorMessage = updateError instanceof Error ? updateError.message : 'Erro desconhecido';
+            toast.error(`Erro ao atualizar produto associado: ${errorMessage}`);
           }
         } else {
           // Cria um novo produto se não existia vínculo

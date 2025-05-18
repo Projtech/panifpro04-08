@@ -75,12 +75,170 @@ interface Ingredient {
   etapa: string | null;
 }
 
+// Interface para o estado do formulário
+interface RecipeFormState {
+  name: string;
+  description: string;
+  instructions: string;
+  yieldKg: string;
+  yieldUnits: number;
+  photoUrl: string;
+  gifUrl: string;
+  isActive: boolean;
+  groupId: string;
+  subgroupId: string;
+  sellingPrice: number;
+  costPerKg: number;
+  costPerUnit: number;
+  profitMargin: number;
+  profitValue: number;
+  totalCost: number;
+  isSubProduct?: boolean;
+  code?: string;
+  finalUnit?: string;
+  group_id?: string;
+  subgroup_id?: string;
+}
+
 export default function RecipeForm() {
-  const { activeCompany, user, loading: authLoading } = useAuth(); // Garantir que activeCompany é obtido do contexto
-  // ... outros hooks e estados
+  const { activeCompany, user, loading: authLoading } = useAuth();
+  const navigate = useNavigate();
+  const { id } = useParams<{ id?: string }>();
+  const isEditing = !!id;
+  
+  // Estados de carregamento
+  const [loading, setLoading] = useState(false);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [subRecipes, setSubRecipes] = useState<Recipe[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [subgroups, setSubgroups] = useState<Subgroup[]>([]);
+  const [existingRecipes, setExistingRecipes] = useState<Recipe[]>([]);
+  
+  // Estado do formulário
+  const [recipeForm, setRecipeForm] = useState<RecipeFormState>({
+    name: '',
+    description: '',
+    instructions: '',
+    yieldKg: '',
+    yieldUnits: 0,
+    photoUrl: '',
+    gifUrl: '',
+    isActive: true,
+    groupId: '',
+    subgroupId: '',
+    sellingPrice: 0,
+    costPerKg: 0,
+    costPerUnit: 0,
+    profitMargin: 0,
+    profitValue: 0,
+    totalCost: 0,
+    isSubProduct: false,
+    code: '',
+    finalUnit: 'KG',
+    group_id: '',
+    subgroup_id: ''
+  });
 
   // Ref para controlar se o componente está montado
   const isMounted = useRef(true);
+  
+  // Efeito para limpar recursos ao desmontar
+  useEffect(() => {
+    return () => {
+      isMounted.current = false;
+      // Limpar URLs de mídia
+      if (recipeForm.photoUrl && recipeForm.photoUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(recipeForm.photoUrl);
+      }
+      if (recipeForm.gifUrl && recipeForm.gifUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(recipeForm.gifUrl);
+      }
+    };
+  }, [recipeForm.photoUrl, recipeForm.gifUrl]);
+  
+  // Carregar dados da receita quando estiver editando
+  useEffect(() => {
+    const loadRecipeData = async () => {
+      if (isEditing && id && activeCompany?.id) {
+        setLoading(true);
+        try {
+          const { recipe, ingredients: recipeIngredients } = await getRecipeWithIngredients(id, activeCompany.id);
+          
+          if (isMounted.current && recipe) {
+            // Mapear dados da receita para o estado do formulário
+            setRecipeForm({
+              name: recipe.name || '',
+              description: recipe.description || '',
+              instructions: recipe.instructions || '',
+              yieldKg: recipe.yield_kg ? recipe.yield_kg.toString().replace('.', ',') : '',
+              yieldUnits: recipe.yield_units || 0,
+              photoUrl: recipe.photo_url || '',
+              gifUrl: recipe.gif_url || '',
+              isActive: recipe.is_active !== false, // default true
+              groupId: recipe.group_id || '',
+              subgroupId: recipe.subgroup_id || '',
+              sellingPrice: recipe.selling_price || 0,
+              costPerKg: recipe.cost_per_kg || 0,
+              costPerUnit: recipe.cost_per_unit || 0,
+              profitMargin: recipe.profit_margin || 0,
+              profitValue: recipe.profit_value || 0,
+              totalCost: recipe.total_cost || 0,
+              isSubProduct: recipe.is_sub_recipe || false,
+              code: recipe.code || '',
+              finalUnit: recipe.final_unit || 'KG',
+              group_id: recipe.group_id || '',
+              subgroup_id: recipe.subgroup_id || ''
+            });
+            
+            setYieldKgForDisplay(recipe.yield_kg || null);
+            setSellingPrice(recipe.selling_price || 0);
+            
+            // Mapear ingredientes
+            if (recipeIngredients && recipeIngredients.length > 0) {
+              const mappedIngredients: Ingredient[] = recipeIngredients.map(ing => ({
+                id: ing.id || `ing-${Date.now()}-${Math.random()}`,
+                productId: ing.is_sub_recipe ? null : ing.product_id,
+                productName: ing.is_sub_recipe 
+                  ? (ing.sub_recipe?.name || 'SubReceita sem nome')
+                  : (ing.product?.name || 'Produto sem nome'),
+                isSubRecipe: ing.is_sub_recipe || false,
+                subRecipeId: ing.is_sub_recipe ? ing.sub_recipe_id : null,
+                quantity: ing.quantity || 0,
+                unit: ing.unit || 'kg',
+                cost: ing.cost || 0,
+                totalCost: ing.total_cost || 0,
+                etapa: ing.etapa || null
+              }));
+              
+              setIngredients(mappedIngredients);
+              
+              // Calcular custo total
+              const total = mappedIngredients.reduce((sum, ing) => sum + (ing.totalCost || 0), 0);
+              setTotalIngredientsCost(total);
+              
+              // Calcular custo por kg e por unidade
+              if (recipe.yield_kg && recipe.yield_kg > 0) {
+                setCostPerKg(total / recipe.yield_kg);
+                
+                if (recipe.yield_units && recipe.yield_units > 0) {
+                  setCostPerUnit(total / recipe.yield_units);
+                }
+              }
+            }
+          }
+        } catch (error) {
+          console.error("Erro ao carregar dados da receita:", error);
+          toast.error("Erro ao carregar dados da receita. Por favor, tente novamente.");
+        } finally {
+          if (isMounted.current) {
+            setLoading(false);
+          }
+        }
+      }
+    };
+    
+    loadRecipeData();
+  }, [id, activeCompany?.id, isEditing]);
   
   // Novo: tipo do produto gerado por receita
   const [productTypeForForm, setProductTypeForForm] = useState<'receita' | 'subreceita'>('receita');
@@ -91,260 +249,395 @@ export default function RecipeForm() {
   // Obter dados da localização (para verificar se estamos retornando do cadastro de produto)
   const location = useLocation();
   
+  // Recuperar dados da receita do localStorage quando retornar da página de novo produto
+  useEffect(() => {
+    // Verificar se estamos retornando da página de cadastro de produto
+    // O NovoProduto.tsx usa 'fromProductCreation' como state
+    const isReturningFromProduct = location.state?.fromProductCreation || location.state?.returnToRecipe;
+    console.log('[RecipeForm] Verificando retorno da página de produto:', { 
+      locationState: location.state, 
+      isReturningFromProduct, 
+      hasTempData: !!localStorage.getItem('temp_recipe_data') 
+    });
+    
+    if (isReturningFromProduct && localStorage.getItem('temp_recipe_data')) {
+      try {
+        const savedData = JSON.parse(localStorage.getItem('temp_recipe_data') || '');
+        
+        if (savedData) {
+          console.log('[RecipeForm] Restaurando dados salvos da receita');
+          // Restaurar os dados do formulário e ingredientes
+          setRecipeForm(savedData.recipeForm);
+          setIngredients(savedData.ingredients);
+          
+          // Recalcular o custo total dos ingredientes
+          const total = savedData.ingredients.reduce((sum, ing) => sum + (ing.totalCost || 0), 0);
+          setTotalIngredientsCost(total);
+          
+          // Recalcular custo por kg e por unidade
+          if (savedData.recipeForm.yieldKg) {
+            const yieldKgNum = parseDecimalBR(savedData.recipeForm.yieldKg);
+            if (yieldKgNum && yieldKgNum > 0) {
+              setCostPerKg(total / yieldKgNum);
+              
+              if (savedData.recipeForm.yieldUnits && savedData.recipeForm.yieldUnits > 0) {
+                setCostPerUnit(total / savedData.recipeForm.yieldUnits);
+              }
+            }
+          }
+          
+          // Se temos um novo produto criado, apenas notificar o usuário
+          const newProductId = location.state?.newProductId;
+          const newProductName = location.state?.newProductName;
+          
+          if (newProductId && newProductName) {
+            console.log('[RecipeForm] Novo produto detectado:', { newProductId, newProductName });
+            
+            // Apenas notificar o usuário que o produto foi criado e está disponível
+            toast.success(`Produto "${newProductName}" criado com sucesso! Disponível para seleção.`);
+            
+            // Recarregar a lista de produtos para incluir o novo produto
+            if (activeCompany?.id) {
+              getProducts(activeCompany.id).then(productsData => {
+                if (isMounted.current) {
+                  setProducts(productsData);
+                }
+              }).catch(error => {
+                console.error("Erro ao recarregar produtos:", error);
+              });
+            }
+          } else {
+            toast.success("Dados da receita restaurados com sucesso!");
+          }
+        }
+      } catch (error) {
+        console.error("Erro ao restaurar dados da receita:", error);
+        toast.error("Erro ao restaurar dados da receita.");
+      } finally {
+        // Limpar os dados temporários
+        localStorage.removeItem('temp_recipe_data');
+      }
+    }
+  }, [location]);
+  
   // Configurar e limpar o ref de montagem
   useEffect(() => {
     isMounted.current = true;
     return () => {
       isMounted.current = false;
-    };
-  }, []);
-
-  function moveIngredientUp(idx: number) {
-    setIngredients(prev => {
-      if (idx <= 0) return prev;
-      const newArr = [...prev];
-      [newArr[idx - 1], newArr[idx]] = [newArr[idx], newArr[idx - 1]];
-      return newArr;
-    });
-  }
-
-  function moveIngredientDown(idx: number) {
-    setIngredients(prev => {
-      if (idx >= prev.length - 1) return prev;
-      const newArr = [...prev];
-      [newArr[idx], newArr[idx + 1]] = [newArr[idx + 1], newArr[idx]];
-      return newArr;
-    });
-  }
-
-  const { id } = useParams();
-  const isEditing = !!id;
-  
-  const [activeTab, setActiveTab] = useState('ingredients');
-  const [loading, setLoading] = useState(false);
-  const [existingRecipes, setExistingRecipes] = useState<Recipe[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [subRecipes, setSubRecipes] = useState<Recipe[]>([]);
-  const [groups, setGroups] = useState<Group[]>([]);
-  const [subgroups, setSubgroups] = useState<Subgroup[]>([]);
-  const [filteredSubgroups, setFilteredSubgroups] = useState<Subgroup[]>([]);
-  const [fieldErrors, setFieldErrors] = useState<Record<string, boolean>>({});
-  
-  // Estado para o modal de nova matéria-prima
-  const [newProductDialogOpen, setNewProductDialogOpen] = useState(false);
-  const [newProduct, setNewProduct] = useState({
-    name: '',
-    unit: 'KG',
-    cost: '',
-    supplier: '',
-    min_stock: '',
-    current_stock: ''
-  });
-  
-  const [recipeForm, setRecipeForm] = useState({
-    name: '',
-    code: '',
-    yieldKg: '', // Mantido como string
-    yieldUnits: 0,
-    instructions: '',
-    photoUrl: '',
-    gifUrl: '',
-    isSubProduct: false,
-    group_id: null as string | null,
-    subgroup_id: null as string | null,
-    finalUnit: 'UN' as 'UN' | 'KG', // Unidade final do produto gerado
-  });
-  
-  const [ingredients, setIngredients] = useState<Ingredient[]>([]);
-  const [newIngredient, setNewIngredient] = useState<Partial<Omit<Ingredient, 'quantity'>> & { quantity: string }>({
-    productId: null,
-    subRecipeId: null,
-    isSubRecipe: false,
-    quantity: '', // Mantido como string
-    etapa: null,
-  });
-  
-  const navigate = useNavigate();
-  
-  // Verificar se estamos retornando do cadastro de produto
-  useEffect(() => {
-    // Verificar se há state na localização indicando retorno do cadastro de produto
-    if (location.state && location.state.fromProductCreation) {
-      // Recuperar dados da receita do localStorage
-      const savedRecipeData = localStorage.getItem('temp_recipe_data');
-      if (savedRecipeData) {
-        try {
-          const parsedData = JSON.parse(savedRecipeData);
-          // Restaurar dados do formulário
-          setRecipeForm(parsedData.recipeForm || recipeForm);
-          setIngredients(parsedData.ingredients || ingredients);
-          // Limpar dados temporários
-          localStorage.removeItem('temp_recipe_data');
-          // Exibir mensagem de sucesso
-          if (location.state.newProductId && location.state.newProductName) {
-            toast.success(`Matéria-prima "${location.state.newProductName}" cadastrada com sucesso!`);
-            // Selecionar automaticamente o produto recém-criado
-            if (location.state.newProductId) {
-              handleProductSelect(location.state.newProductId);
-            }
-          }
-        } catch (error) {
-          console.error("Erro ao restaurar dados da receita:", error);
-        }
+      // Limpar a URL do objeto quando o componente for desmontado
+      if (recipeForm.photoUrl && recipeForm.photoUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(recipeForm.photoUrl);
       }
-    }
-  }, [location]);
+    };
+  }, [recipeForm.photoUrl]);
   
-  // Fetch products and sub-recipes on component mount
+  // Carregar dados iniciais (produtos, grupos, subgrupos e receitas)
   useEffect(() => {
     const fetchData = async () => {
-      setLoading(true);
-      try {
-        if (authLoading || !activeCompany?.id) {
-          toast.error("Empresa ativa não carregada. Tente novamente mais tarde.");
-          setLoading(false);
-          return;
-        }
-        const productsData = await getProducts(activeCompany.id);
-        const recipesData = await getRecipes(activeCompany.id);
-        const groupsData = await getGroups(activeCompany.id);
-        const subgroupsData = await getSubgroups(activeCompany.id);
-        
-        setProducts(productsData);
-        setSubRecipes(recipesData.filter(recipe => recipe.code === 'SUB'));
-        setExistingRecipes(recipesData);
-        setGroups(groupsData);
-        setSubgroups(subgroupsData);
-        
-        // If editing, load recipe data
-        if (isEditing && id) {
-          if (!activeCompany?.id) {
-            toast.error("Empresa ativa não carregada. Tente novamente mais tarde.");
-            setLoading(false);
-            return;
-          }
-          const { recipe, ingredients: recipeIngredients } = await getRecipeWithIngredients(id, activeCompany.id);
-          if (recipe) {
-            // Definir tipo do produto gerado
-            setProductTypeForForm(recipe.code === 'SUB' ? 'subreceita' : 'receita');
-            // Load recipe details
-            setRecipeForm({
-              name: recipe.name,
-              code: recipe.code || '',
-              yieldKg: recipe.yield_kg?.toString().replace('.', ',') || '', // Converter número do backend para string com vírgula
-              yieldUnits: recipe.yield_units || 0,
-              instructions: recipe.instructions || '',
-              photoUrl: recipe.photo_url || '',
-              gifUrl: recipe.gif_url || '',
-              isSubProduct: recipe.code === 'SUB',
-              group_id: recipe.group_id,
-              subgroup_id: recipe.subgroup_id,
-              finalUnit: (recipe.yield_units && recipe.yield_units > 0) ? 'UN' : 'KG',
+      if (activeCompany?.id) {
+        setLoading(true);
+        try {
+          const [productsData, recipesData, groupsData, subgroupsData] = await Promise.all([
+            getProducts(activeCompany.id),
+            getRecipes(activeCompany.id),
+            getGroups(activeCompany.id),
+            getSubgroups(activeCompany.id)
+          ]);
+          
+          if (isMounted.current) {
+            setProducts(productsData);
+            setExistingRecipes(recipesData);
+            setGroups(groupsData);
+            setSubgroups(subgroupsData);
+            
+            // Carregar sub-receitas (receitas que podem ser usadas como ingredientes)
+            // Verificar se is_sub_recipe existe ou usar uma propriedade alternativa
+            const subRecipesData = recipesData.filter(r => {
+              // Log para depuração
+              console.log('[RecipeForm] Verificando receita para filtrar como subreceita:', {
+                id: r.id,
+                name: r.name,
+                // Usar acesso seguro com operador opcional
+                is_sub_recipe: (r as any).is_sub_recipe,
+                code: (r as any).code
+              });
+              
+              // Considerar uma receita como subreceita se qualquer uma das condições for verdadeira
+              return (r as any).is_sub_recipe === true || ((r as any).code && (r as any).code.startsWith('SUB'));
             });
             
-            // Transform ingredients to match our front-end ingredient structure
-            const formattedIngredients = recipeIngredients.map(ing => ({
-              id: ing.id || `temp-${Date.now()}-${Math.random()}`,
-              productId: ing.is_sub_recipe ? null : ing.product_id,
-              productName: ing.is_sub_recipe 
-                ? (ing.sub_recipe ? ing.sub_recipe.name : 'Sub-receita')
-                : (ing.product ? ing.product.name : 'Produto'),
-              isSubRecipe: ing.is_sub_recipe,
-              subRecipeId: ing.is_sub_recipe ? ing.sub_recipe_id : null,
-              quantity: ing.quantity,
-              unit: ing.unit,
-              cost: ing.cost,
-              totalCost: ing.total_cost,
-              etapa: ing.etapa,
-            }));
-            
-            setIngredients(formattedIngredients);
-          } else {
-            toast.error("Receita não encontrada");
-            navigate('/recipes');
+            console.log('[RecipeForm] SubReceitas carregadas:', subRecipesData.length);
+            setSubRecipes(subRecipesData);
+          }
+        } catch (error) {
+          console.error("Erro ao carregar dados:", error);
+          toast.error("Erro ao carregar dados. Por favor, tente novamente.");
+        } finally {
+          if (isMounted.current) {
+            setLoading(false);
           }
         }
-      } catch (error) {
-        console.error("Error fetching data:", error);
-        toast.error("Erro ao carregar produtos e receitas");
-      } finally {
-        setLoading(false);
       }
     };
-
-    // Definir tipo padrão ao criar nova receita
-    if (!isEditing) {
-      setProductTypeForForm('receita');
-    }
     
     fetchData();
-  }, [id, isEditing, navigate]);
+  }, [activeCompany?.id]);
   
-  // Calculate total cost and costs per kg/unit
-  const totalIngredientsCost = ingredients.reduce((sum, ing) => sum + ing.totalCost, 0);
-  const yieldKgForDisplay = parseDecimalBR(recipeForm.yieldKg); // Parse string para display
-  const costPerKg = (yieldKgForDisplay && yieldKgForDisplay > 0) ? totalIngredientsCost / yieldKgForDisplay : 0;
-  const costPerUnit = recipeForm.yieldUnits > 0 ? totalIngredientsCost / recipeForm.yieldUnits : 0;
-  const [sellingPrice, setSellingPrice] = useState<number>(0);
+  // Estado para os arquivos de mídia
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedGif, setSelectedGif] = useState<File | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, boolean>>({});
+  
+  // Outros estados necessários
+  const [ingredients, setIngredients] = useState<Ingredient[]>([]);
+  const [totalIngredientsCost, setTotalIngredientsCost] = useState(0);
+  const [costPerKg, setCostPerKg] = useState(0);
+  const [costPerUnit, setCostPerUnit] = useState(0);
+  const [yieldKgForDisplay, setYieldKgForDisplay] = useState<number | null>(null);
+  
+
+  
+  // Estado para o novo ingrediente
+  const [newIngredient, setNewIngredient] = useState({
+    productId: null as string | null,
+    productName: '',
+    isSubRecipe: false,
+    subRecipeId: null as string | null,
+    quantity: '',
+    unit: 'kg',
+    cost: 0,
+    totalCost: 0,
+    etapa: null as string | null
+  });
+  
+  // Estado para a aba ativa
+  const [activeTab, setActiveTab] = useState('ingredients');
+  
+  // Estado para o preço de venda
+  const [sellingPrice, setSellingPrice] = useState(0);
   
   // Filtrar subgrupos com base no grupo selecionado
-  useEffect(() => {
-    if (recipeForm.group_id) {
-      const filtered = subgroups.filter(subgroup => subgroup.group_id === recipeForm.group_id);
-      setFilteredSubgroups(filtered);
-      
-      // Se o subgrupo atual não pertence ao grupo selecionado, resetar
-      if (recipeForm.subgroup_id) {
-        const belongsToGroup = filtered.some(sg => sg.id === recipeForm.subgroup_id);
-        if (!belongsToGroup) {
-          setRecipeForm(prev => ({ ...prev, subgroup_id: null }));
-        }
-      }
-    } else {
-      setFilteredSubgroups([]);
-      setRecipeForm(prev => ({ ...prev, subgroup_id: null }));
-    }
-  }, [recipeForm.group_id, subgroups]);
+  const filteredSubgroups = useMemo(() => {
+    return subgroups.filter(subgroup => subgroup.group_id === recipeForm.groupId);
+  }, [subgroups, recipeForm.groupId]);
   
+  // Mover ingrediente para cima
+  const moveIngredientUp = (index: number) => {
+    if (index <= 0 || index >= ingredients.length) return;
+    
+    const newIngredients = [...ingredients];
+    [newIngredients[index - 1], newIngredients[index]] = [newIngredients[index], newIngredients[index - 1]];
+    setIngredients(newIngredients);
+  };
+  
+  // Mover ingrediente para baixo
+  const moveIngredientDown = (index: number) => {
+    if (index < 0 || index >= ingredients.length - 1) return;
+    
+    const newIngredients = [...ingredients];
+    [newIngredients[index], newIngredients[index + 1]] = [newIngredients[index + 1], newIngredients[index]];
+    setIngredients(newIngredients);
+  };
+  
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Verifica se é uma imagem
+    if (!file.type.startsWith('image/')) {
+      toast.error('Por favor, selecione um arquivo de imagem válido (JPG, PNG, etc.)');
+      return;
+    }
+
+    // Verifica o tamanho do arquivo (5MB máximo)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('O arquivo é muito grande. O tamanho máximo permitido é 5MB.');
+      return;
+    }
+
+    // Limpa a URL anterior se existir
+    if (recipeForm.photoUrl && recipeForm.photoUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(recipeForm.photoUrl);
+    }
+
+    // Cria uma URL para visualização
+    const imageUrl = URL.createObjectURL(file);
+    
+    // Atualiza o estado com o arquivo e a URL
+    setSelectedFile(file);
+    setRecipeForm(prev => ({
+      ...prev,
+      photoUrl: imageUrl
+    }));
+  };
+  
+  const handleGifUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Verifica se é um GIF
+    if (!file.type.includes('gif')) {
+      toast.error('Por favor, selecione um arquivo GIF.');
+      return;
+    }
+
+    // Verifica o tamanho do arquivo (10MB máximo)
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('O arquivo é muito grande. O tamanho máximo permitido é 10MB.');
+      return;
+    }
+
+    // Limpa a URL anterior se existir
+    if (recipeForm.gifUrl && recipeForm.gifUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(recipeForm.gifUrl);
+    }
+
+    // Cria uma URL para visualização
+    const gifUrl = URL.createObjectURL(file);
+    
+    // Atualiza o estado com o arquivo e a URL
+    setSelectedGif(file);
+    setRecipeForm(prev => ({
+      ...prev,
+      gifUrl: gifUrl
+    }));
+  };
+  
+  const handleRemoveImage = (type: 'image' | 'gif' = 'image') => {
+    if (type === 'image') {
+      // Limpa a URL do objeto
+      if (recipeForm.photoUrl && recipeForm.photoUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(recipeForm.photoUrl);
+      }
+      
+      // Limpa o estado
+      setSelectedFile(null);
+      setRecipeForm(prev => ({
+        ...prev,
+        photoUrl: ''
+      }));
+    } else {
+      // Limpa a URL do GIF
+      if (recipeForm.gifUrl && recipeForm.gifUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(recipeForm.gifUrl);
+      }
+      
+      // Limpa o estado do GIF
+      setSelectedGif(null);
+      setRecipeForm(prev => ({
+        ...prev,
+        gifUrl: ''
+      }));
+    }
+  };
+  
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    console.log(`handleInputChange - Name: ${name}, Value: ${value}`); // <-- LOG DE DEPURAÇÃO
-    // Apenas atualiza o estado com o valor string do input
-    // A conversão/validação será feita no handleSave
-    setRecipeForm(prev => ({ 
-      ...prev, 
+    setRecipeForm(prev => ({
+      ...prev,
       [name]: value
     }));
   };
 
-  const handleCheckboxChange = (checked: boolean) => {
-    setRecipeForm(prev => ({ 
-      ...prev, 
-      isSubProduct: checked,
-      code: checked ? 'SUB' : ''
-    }));
+  const handleCheckboxChange = (checked: boolean | string, checkboxId?: string) => {
+    const isChecked = typeof checked === 'boolean' ? checked : checked === 'true';
+    
+    // Verificar qual checkbox foi clicado com base no ID ou contexto
+    if (checkboxId === 'isSubProduct' || !checkboxId) {
+      // Atualizar isSubProduct quando o checkbox "É uma SubReceita" é clicado
+      console.log('[handleCheckboxChange] Atualizando isSubProduct para:', isChecked);
+      
+      setRecipeForm(prev => {
+        // Gerar um código único para subreceitas
+        let newCode = '';
+        if (isChecked) {
+          // Gerar um código único com prefixo SUB e um timestamp
+          const timestamp = Date.now().toString().slice(-6); // Últimos 6 dígitos do timestamp
+          newCode = `SUB-${timestamp}`;
+        } else {
+          // Se estiver desmarcando, limpar o código apenas se começar com 'SUB'
+          newCode = prev.code?.startsWith('SUB') ? '' : prev.code;
+        }
+        
+        return {
+          ...prev,
+          isSubProduct: isChecked,
+          // Usar o código único gerado
+          code: newCode
+        };
+      });
+    } else {
+      // Para outros checkboxes (como isActive)
+      setRecipeForm(prev => ({
+        ...prev,
+        isActive: isChecked
+      }));
+    }
   };
   
-  const handleIngredientChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleIngredientChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    // Apenas atualiza o estado com o valor string do input
-    // A conversão/validação será feita no addIngredient
-    setNewIngredient(prev => ({ 
-      ...prev, 
-      [name]: value
-    }));
+    
+    // Para campos numéricos, garantir que são números válidos
+    if (name === 'quantity' || name === 'cost' || name === 'totalCost') {
+      // Se for string vazia, permite para que o usuário possa apagar o valor
+      if (value === '') {
+        setNewIngredient(prev => ({
+          ...prev,
+          [name]: value
+        }));
+        return;
+      }
+      
+      // Caso especial: se começar com vírgula, adiciona um zero na frente
+      let valueToProcess = value;
+      if (value.startsWith(',')) {
+        valueToProcess = '0' + value;
+      }
+      
+      // Converte para número e verifica se é um número válido
+      const numValue = parseFloat(valueToProcess.replace(',', '.'));
+      if (isNaN(numValue)) {
+        return; // Não atualiza se não for um número válido
+      }
+      
+      setNewIngredient(prev => ({
+        ...prev,
+        [name]: name === 'quantity' ? value : numValue // Mantém como string para quantidade para permitir formatação
+      }));
+    } else {
+      setNewIngredient(prev => ({
+        ...prev,
+        [name]: value
+      }));
+    }
   };
 
 
   const handleProductTypeChange = (type: string) => {
-    // Reset product and sub-recipe selections, mas mantém etapa!
+    // Reset product and sub-recipe selections, mas mantém etapa e o texto de busca!
     setNewIngredient(prev => ({
       ...prev,
       productId: null,
       subRecipeId: null,
       isSubRecipe: type === 'sub-product',
+      // Mantém o nome do produto para permitir a busca imediata
       // etapa: prev.etapa // mantém o valor já escolhido
     }));
+    
+    // Adiciona um pequeno atraso para garantir que o dropdown de resultados seja exibido
+    setTimeout(() => {
+      const inputElement = document.querySelector('input[placeholder="Digite para buscar uma SubReceita"], input[placeholder="Digite para buscar uma matéria prima"]');
+      if (inputElement instanceof HTMLInputElement) {
+        // Simula um evento de mudança para acionar a busca
+        const event = new Event('input', { bubbles: true });
+        inputElement.dispatchEvent(event);
+        // Foca no campo de busca
+        inputElement.focus();
+      }
+    }, 100);
   };
   
   const handleProductSelect = (value: string) => {
@@ -413,11 +706,11 @@ export default function RecipeForm() {
       id: `ing-${Date.now()}`,
       productId: newIngredient.productId || null,
       subRecipeId: newIngredient.subRecipeId || null,
-      productName: newIngredient.productName!,
-      isSubRecipe: newIngredient.isSubRecipe!,
+      productName: newIngredient.productName,
+      isSubRecipe: newIngredient.isSubRecipe,
       quantity: quantityNum, // Usar o número validado
-      unit: newIngredient.unit!,
-      cost: newIngredient.cost!,
+      unit: newIngredient.unit,
+      cost: newIngredient.cost,
       totalCost,
       etapa: newIngredient.etapa,
     };
@@ -427,9 +720,14 @@ export default function RecipeForm() {
     // Reset ingredient form but keep isSubRecipe state
     setNewIngredient({
       productId: null,
-      subRecipeId: null,
+      productName: '',
       isSubRecipe: newIngredient.isSubRecipe,
-      quantity: '' // Resetar para string vazia
+      subRecipeId: null,
+      quantity: '',
+      unit: 'kg',
+      cost: 0,
+      totalCost: 0,
+      etapa: null
     });
   };
   
@@ -551,7 +849,7 @@ export default function RecipeForm() {
       // Format recipe data
       const recipeData: Omit<Recipe, 'id' | 'created_at' | 'created_by'> = {
         name: recipeForm.name,
-        code: recipeForm.isSubProduct ? 'SUB' : (recipeForm.code || null),
+        code: recipeForm.code || null, // Usar o código já definido (que pode ser SUB-XXXXXX para subreceitas)
         yield_kg: yieldKgNum!, // Usar o número validado!
         yield_units: recipeForm.yieldUnits || null,
         instructions: recipeForm.instructions || null,
@@ -559,8 +857,8 @@ export default function RecipeForm() {
         gif_url: recipeForm.gifUrl || null,
         cost_per_kg: costPerKg,
         cost_per_unit: costPerUnit,
-        group_id: recipeForm.group_id,
-        subgroup_id: recipeForm.subgroup_id,
+        group_id: recipeForm.groupId || null,
+        subgroup_id: recipeForm.subgroupId || null,
         // Incluir os campos de dias da semana com valores nulos por enquanto
         all_days: null,
         monday: null,
@@ -657,7 +955,7 @@ export default function RecipeForm() {
     }
   }, [recipeForm, ingredients, activeCompany, id, isEditing, costPerKg, costPerUnit, navigate]);
 
-  console.log("Renderizando RecipeForm com estado:", recipeForm); // <-- LOG DE DEPURAÇÃO
+  // Remover log de depuração para produção
   return (
     <div className="animate-fade-in">
       <div className="border-b border-gray-200 pb-5 mb-6">
@@ -739,7 +1037,7 @@ export default function RecipeForm() {
                   <Checkbox 
                     id="isSubProduct" 
                     checked={recipeForm.isSubProduct}
-                    onCheckedChange={handleCheckboxChange}
+                    onCheckedChange={(checked) => handleCheckboxChange(checked, 'isSubProduct')}
                   />
                   <label 
                     htmlFor="isSubProduct" 
@@ -815,40 +1113,38 @@ export default function RecipeForm() {
                 </div>
                 
                 <div className="md:col-span-4 space-y-1">
-                  <label htmlFor="group_id" className="form-label text-sm">Grupo</label>
+                  <label htmlFor="groupId" className="form-label text-sm">Grupo</label>
                   <select
-                    id="group_id"
-                    name="group_id"
-                    value={recipeForm.group_id || ''}
+                    id="groupId"
+                    name="groupId"
+                    value={recipeForm.groupId}
                     onChange={(e) => {
                       handleInputChange(e);
+                      // Limpar subgrupo quando o grupo mudar
+                      setRecipeForm(prev => ({ ...prev, subgroupId: '' }));
                     }}
                     className="w-full flex h-9 rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <option value="">Selecione um grupo</option>
-                    {groups.map((group) => (
-                      <option key={group.id} value={group.id}>
-                        {group.name}
-                      </option>
+                    {groups.map(group => (
+                      <option key={group.id} value={group.id}>{group.name}</option>
                     ))}
                   </select>
                 </div>
                 
                 <div className="md:col-span-4 space-y-1">
-                  <label htmlFor="subgroup_id" className="form-label text-sm">Subgrupo</label>
+                  <label htmlFor="subgroupId" className="form-label text-sm">Subgrupo</label>
                   <select
-                    id="subgroup_id"
-                    name="subgroup_id"
-                    value={recipeForm.subgroup_id || ''}
+                    id="subgroupId"
+                    name="subgroupId"
+                    value={recipeForm.subgroupId}
                     onChange={handleInputChange}
-                    disabled={!recipeForm.group_id}
                     className="w-full flex h-9 rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={!recipeForm.groupId}
                   >
                     <option value="">Selecione um subgrupo</option>
-                    {filteredSubgroups.map((subgroup) => (
-                      <option key={subgroup.id} value={subgroup.id}>
-                        {subgroup.name}
-                      </option>
+                    {filteredSubgroups.map(subgroup => (
+                      <option key={subgroup.id} value={subgroup.id}>{subgroup.name}</option>
                     ))}
                   </select>
                 </div>
@@ -936,13 +1232,22 @@ export default function RecipeForm() {
                               }));
                             }}
                           />
-                          {newIngredient.productName && !newIngredient.subRecipeId && (
+                          {/* Mostrar o dropdown apenas quando o usuário digitar algo */}
+                          {newIngredient.isSubRecipe && newIngredient.productName && !newIngredient.subRecipeId && (
                             <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-auto">
                               {(() => {
-                                const filteredSubRecipes = subRecipes.filter(r => 
-                                  r.name.toLowerCase().includes(newIngredient.productName?.toLowerCase() || '')
-                                );
-                                
+                                console.log('[RecipeForm] Filtrando subreceitas:', {
+                                  subRecipesCount: subRecipes.length,
+                                  searchTerm: newIngredient.productName,
+                                  allSubRecipes: subRecipes.map(r => ({ id: r.id, name: r.name }))
+                                });
+                                const filteredSubRecipes = subRecipes.filter(r => {
+                                  if (!newIngredient.productName || newIngredient.productName.trim() === '') {
+                                    return true;
+                                  }
+                                  return r.name && r.name.toLowerCase().includes(newIngredient.productName.toLowerCase());
+                                });
+                                console.log('[RecipeForm] Subreceitas filtradas:', filteredSubRecipes.length);
                                 if (filteredSubRecipes.length > 0) {
                                   return filteredSubRecipes.map(recipe => (
                                     <div
@@ -989,13 +1294,34 @@ export default function RecipeForm() {
                               }));
                             }}
                           />
-                          {newIngredient.productName && !newIngredient.productId && (
+                          {/* Mostrar o dropdown apenas quando o usuário digitar algo */}
+                          {!newIngredient.isSubRecipe && newIngredient.productName && !newIngredient.productId && (
                             <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-auto">
                               {(() => {
-                                const materiasPrimas = products.filter(p => 
-                                  p.product_type === 'materia_prima' && 
-                                  p.name.toLowerCase().includes(newIngredient.productName?.toLowerCase() || '')
-                                );
+                                // Adicionar logs para depuração
+                                console.log('[RecipeForm] Filtrando matérias primas:', {
+                                  productsCount: products.length,
+                                  searchTerm: newIngredient.productName,
+                                  materiasPrimasCount: products.filter(p => p.product_type === 'materia_prima').length
+                                });
+                                
+                                // Ajustar o filtro para ser mais permissivo
+                                const materiasPrimas = products.filter(p => {
+                                  // Primeiro filtrar pelo tipo
+                                  if (p.product_type !== 'materia_prima') {
+                                    return false;
+                                  }
+                                  
+                                  // Se o campo de busca estiver vazio, mostrar todas as matérias primas
+                                  if (!newIngredient.productName || newIngredient.productName.trim() === '') {
+                                    return true;
+                                  }
+                                  
+                                  // Caso contrário, filtrar pelo nome
+                                  return p.name && p.name.toLowerCase().includes(newIngredient.productName.toLowerCase());
+                                });
+                                
+                                console.log('[RecipeForm] Matérias primas filtradas:', materiasPrimas.length);
                                 
                                 if (materiasPrimas.length > 0) {
                                   return materiasPrimas.map(product => (
@@ -1190,35 +1516,55 @@ export default function RecipeForm() {
                       </Button>
                     </div>
                   </div>
-                  
-                  <div className="space-y-4">
-                    <label className="form-label">GIF do Processo</label>
-                    <p className="text-xs text-gray-500 mb-1">
-                      (O GIF será usado para visualização na tela de receitas em tablet)
-                    </p>
-                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 flex flex-col items-center justify-center text-center">
-                      <UploadCloud className="h-10 w-10 text-gray-400 mb-2" />
-                      <p className="text-sm text-gray-600 mb-2">
-                        Arraste um GIF aqui ou clique para fazer upload
+                                    <div className="space-y-4">
+                      <label className="form-label">GIF do Processo</label>
+                      <p className="text-xs text-gray-500 mb-1">
+                        (O GIF será usado para visualização na tela de receitas em tablet)
                       </p>
-                      <p className="text-xs text-gray-500">(Formato: GIF - Máx: 10MB)</p>
-                      <Input
-                        id="gifUrl"
-                        name="gifUrl"
-                        type="file"
-                        accept="image/gif"
-                        className="hidden"
-                      />
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        className="mt-4"
-                        onClick={() => document.getElementById('gifUrl')?.click()}
-                      >
-                        Selecionar Arquivo
-                      </Button>
+                      <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 flex flex-col items-center justify-center text-center">
+                        {recipeForm.gifUrl ? (
+                          <div className="relative w-full">
+                            <img 
+                              src={recipeForm.gifUrl} 
+                              alt="GIF Preview" 
+                              className="max-h-48 mx-auto mb-4 rounded-md"
+                            />
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              className="absolute top-2 right-2"
+                              onClick={() => handleRemoveImage('gif')}
+                            >
+                              <Trash className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <>
+                            <UploadCloud className="h-10 w-10 text-gray-400 mb-2" />
+                            <p className="text-sm text-gray-600 mb-2">
+                              Arraste um GIF aqui ou clique para fazer upload
+                            </p>
+                            <p className="text-xs text-gray-500 mb-2">(Formato: GIF - Máx: 10MB)</p>
+                            <Input
+                              id="gifUrl"
+                              name="gifUrl"
+                              type="file"
+                              accept="image/gif"
+                              className="hidden"
+                              onChange={handleGifUpload}
+                            />
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className="mt-2"
+                              onClick={() => document.getElementById('gifUrl')?.click()}
+                            >
+                              Selecionar GIF
+                            </Button>
+                          </>
+                        )}
+                      </div>
                     </div>
-                  </div>
                 </div>
               </TabsContent>
               

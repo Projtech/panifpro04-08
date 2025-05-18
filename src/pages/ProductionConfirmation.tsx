@@ -108,17 +108,36 @@ export default function ProductionConfirmation() {
   }, [id, navigate, authLoading, activeCompany?.id]);
   
   const handleOrderSelect = async (orderId: string) => {
+    if (!activeCompany?.id) {
+      toast({
+        title: "Erro",
+        description: "Empresa não identificada. Tente fazer login novamente.",
+        variant: "destructive"
+      });
+      setLoading(false);
+      return;
+    }
+    
     setSelectedOrderId(orderId);
     setLoading(true);
     
-    const order = await getProductionOrder(orderId);
-    setCurrentOrder(order);
-    
-    if (order) {
-      setItems(order.items);
+    try {
+      const order = await getProductionOrder(orderId, activeCompany.id);
+      setCurrentOrder(order);
+      
+      if (order) {
+        setItems(order.items);
+      }
+    } catch (error) {
+      console.error("Erro ao carregar pedido de produção:", error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar o pedido de produção.",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
     }
-    
-    setLoading(false);
   };
   
   const handleQuantityChange = (id: string, field: 'actual_quantity_kg' | 'actual_quantity_units', value: string) => {

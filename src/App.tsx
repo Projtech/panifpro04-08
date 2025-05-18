@@ -14,7 +14,7 @@ import { ResetPassword } from "./pages/Auth/ResetPassword";
 import { Login } from "./pages/Auth/Login";
 import { Signup } from "./pages/Auth/Signup";
 import { SelectCompany } from "./pages/Company/SelectCompany";
-import { UserManagement } from "./pages/Admin/UserManagement";
+
 import { AuthErrorHandler } from './components/AuthErrorHandler';
 
 // Application Components
@@ -110,13 +110,7 @@ const App = () => {
                 </ProtectedRoute>
               } />
               
-              <Route path="/users" element={
-                <ProtectedRoute adminOnly>
-                  <AppLayout>
-                    <UserManagement />
-                  </AppLayout>
-                </ProtectedRoute>
-              } />
+
               
               <Route path="/recipes" element={
                 <ProtectedRoute>

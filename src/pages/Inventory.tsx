@@ -1,14 +1,8 @@
-
 import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { PlusCircle, Search, Loader2 } from "lucide-react";
 import { getInventoryTransactions } from "@/services/inventory/transactionService";
 import { useAuth } from '@/contexts/AuthContext';
@@ -23,7 +17,7 @@ import TransactionHistoryTable from "@/components/Inventory/TransactionHistoryTa
 import TransactionForm from "@/components/Inventory/TransactionForm";
 
 export default function Inventory() {
-  const { activeCompany, loading: authLoading, isSessionReady } = useAuth();
+  const { activeCompany, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(false);
   const [inventory, setInventory] = useState<ProductInventory[]>([]);
   const [transactions, setTransactions] = useState<InventoryTransactionWithProduct[]>([]);
@@ -130,6 +124,9 @@ export default function Inventory() {
         <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
             <DialogTitle>Registrar Movimentação de Estoque</DialogTitle>
+            <DialogDescription>
+              Preencha os dados abaixo para registrar uma entrada ou saída de produtos no estoque.
+            </DialogDescription>
           </DialogHeader>
 
           <TransactionForm 

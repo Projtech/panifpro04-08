@@ -6,6 +6,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
@@ -27,17 +28,16 @@ const DeleteDialog: React.FC<DeleteDialogProps> = ({
 }) => {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[400px]" aria-describedby="delete-dialog-description">
+      <DialogContent className="sm:max-w-[400px]">
         <DialogHeader>
           <DialogTitle>Confirmar Exclusão</DialogTitle>
-        </DialogHeader>
-        
-        <div className="py-4">
-          <p>
+          <DialogDescription>
             Tem certeza que deseja excluir este {type === 'group' ? 'grupo' : 'subgrupo'}?
             Esta ação não pode ser desfeita.
-          </p>
-        </div>
+          </DialogDescription>
+        </DialogHeader>
+        
+        <div className="py-4"></div>
         
         <DialogFooter>
           <Button

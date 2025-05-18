@@ -30,6 +30,9 @@ interface ProductFromDB {
   sunday: boolean | null;
   ativo: boolean | null;
   company_id: string | null;
+  created_at?: string;
+  updated_at?: string;
+  [key: string]: any; // Para permitir acesso a propriedades dinâmicas
 }
 
 // Definição corrigida para os tipos de produto válidos
@@ -88,7 +91,16 @@ function validateProduct(product: Omit<Product, 'id'>): string | null {
   }
 
   // Validação de unidade e peso - AJUSTADA
-  if (product.product_type !== 'materia_prima') { // Só valida pesos se NÃO for matéria prima
+  if (product.product_type === 'subreceita') {
+    // Para subreceitas, garantimos que a unidade seja 'kg' e que haja um peso em kg
+    if (product.unit.toLowerCase() !== 'kg') {
+      return "Subreceitas devem usar a unidade 'kg'";
+    }
+    if (!product.kg_weight || product.kg_weight <= 0) {
+      return "Para subreceitas, informe o peso total (kg)";
+    }
+  } else if (product.product_type === 'receita') {
+    // Para receitas normais, validamos de acordo com a unidade
     if (product.unit.toLowerCase() === 'kg') {
       if (!product.kg_weight || product.kg_weight <= 0) {
         return "Para produtos em kg, informe o peso total (kg)";
@@ -98,7 +110,7 @@ function validateProduct(product: Omit<Product, 'id'>): string | null {
         return "Para produtos em unidades, informe o peso por unidade (kg)";
       }
     }
-  } // Fim do IF que exclui matéria prima da validação de peso
+  } // Matérias-primas não precisam de validação de peso
 
   // Custo é obrigatório e não pode ser negativo
   if (product.cost === null || product.cost === undefined || product.cost < 0) {
@@ -113,6 +125,11 @@ function validateProduct(product: Omit<Product, 'id'>): string | null {
   return null;
 }
 
+/**
+ * Busca todos os produtos de uma empresa
+ * @param companyId ID da empresa
+ * @returns Lista de produtos
+ */
 export async function getProducts(companyId: string): Promise<Product[]> {
   if (!companyId) {
     console.warn("[getProducts] companyId ausente - sessão possivelmente expirada");
@@ -130,34 +147,45 @@ export async function getProducts(companyId: string): Promise<Product[]> {
     console.log(`[PRODUCTS] Successfully fetched ${data?.length || 0} products`);
     
     // Converter dados do banco para o tipo Product
-    return (data || []).map((item: ProductFromDB) => ({
-      id: item.id,
-      name: item.name,
-      unit: item.unit,
-      sku: item.sku,
-      supplier: item.supplier,
-      cost: item.cost,
-      min_stock: item.min_stock,
-      current_stock: item.current_stock,
-      recipe_id: item.recipe_id,
-      unit_price: item.unit_price,
-      unit_weight: item.unit_weight,
-      kg_weight: item.kg_weight,
-      group_id: item.group_id,
-      subgroup_id: item.subgroup_id,
-      product_type: item.product_type as ProductType | undefined,
-      code: item.code,
-      all_days: item.all_days,
-      monday: item.monday,
-      tuesday: item.tuesday,
-      wednesday: item.wednesday,
-      thursday: item.thursday,
-      friday: item.friday,
-      saturday: item.saturday,
-      sunday: item.sunday,
-      ativo: item.ativo ?? true,
-      company_id: item.company_id ?? companyId
-    }));
+    return (data || []).map((item: any) => {
+      // Garantir que todos os campos necessários estejam presentes
+      const product: Product = {
+        id: item.id,
+        name: item.name,
+        unit: item.unit || 'UN', // Valor padrão para unidade
+        sku: item.sku || '',
+        supplier: item.supplier || 'Produção Interna',
+        cost: item.cost || 0,
+        min_stock: item.min_stock || 0,
+        current_stock: item.current_stock || 0,
+        recipe_id: item.recipe_id || null,
+        unit_price: item.unit_price || 0,
+        unit_weight: item.unit_weight || null,
+        kg_weight: item.kg_weight || null,
+        group_id: item.group_id || null,
+        subgroup_id: item.subgroup_id || null,
+        product_type: (item.product_type as ProductType) || 'materia_prima',
+        code: item.code || null,
+        all_days: item.all_days || false,
+        monday: item.monday || false,
+        tuesday: item.tuesday || false,
+        wednesday: item.wednesday || false,
+        thursday: item.thursday || false,
+        friday: item.friday || false,
+        saturday: item.saturday || false,
+        sunday: item.sunday || false,
+        ativo: item.ativo !== undefined ? item.ativo : true,
+        company_id: item.company_id || companyId
+      };
+      
+      // Garantir que subreceitas tenham a unidade correta
+      if (product.product_type === 'subreceita' && product.unit.toLowerCase() !== 'kg') {
+        console.warn(`Subreceita ${product.name} (${product.id}) não está com unidade 'kg'. Corrigindo...`);
+        product.unit = 'kg';
+      }
+      
+      return product;
+    });
   } catch (error) {
     console.error("[PRODUCTS] Error fetching products:", error);
     toast.error("Erro ao carregar produtos");
@@ -165,6 +193,85 @@ export async function getProducts(companyId: string): Promise<Product[]> {
   }
 }
 
+/**
+ * Busca produtos por tipo (materia_prima, subreceita, receita)
+ * @param type Tipo do produto
+ * @param companyId ID da empresa
+ * @returns Lista de produtos do tipo especificado
+ */
+export async function getProductsByType(type: ProductType, companyId: string): Promise<Product[]> {
+  if (!companyId) {
+    console.warn("[getProductsByType] companyId ausente - sessão possivelmente expirada");
+    throw new Error("Sessão inválida ou empresa não selecionada");
+  }
+  
+  console.log(`[PRODUCTS] Buscando produtos do tipo: ${type}`);
+  
+  try {
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .eq('product_type', type)
+      .eq('company_id', companyId)
+      .order('name');
+      
+    if (error) throw error;
+    
+    console.log(`[PRODUCTS] Encontrados ${data?.length || 0} produtos do tipo ${type}`);
+    
+    // Converter dados do banco para o tipo Product
+    return (data || []).map((item: any) => {
+      // Garantir que todos os campos necessários estejam presentes
+      const product: Product = {
+        id: item.id,
+        name: item.name,
+        unit: item.unit || (type === 'subreceita' ? 'kg' : 'UN'),
+        sku: item.sku || '',
+        supplier: item.supplier || 'Produção Interna',
+        cost: item.cost || 0,
+        min_stock: item.min_stock || 0,
+        current_stock: item.current_stock || 0,
+        recipe_id: item.recipe_id || null,
+        unit_price: item.unit_price || 0,
+        unit_weight: item.unit_weight || null,
+        kg_weight: item.kg_weight || (type === 'subreceita' ? 1 : null),
+        group_id: item.group_id || null,
+        subgroup_id: item.subgroup_id || null,
+        product_type: (item.product_type as ProductType) || 'materia_prima',
+        code: item.code || null,
+        all_days: item.all_days || false,
+        monday: item.monday || false,
+        tuesday: item.tuesday || false,
+        wednesday: item.wednesday || false,
+        thursday: item.thursday || false,
+        friday: item.friday || false,
+        saturday: item.saturday || false,
+        sunday: item.sunday || false,
+        ativo: item.ativo !== undefined ? item.ativo : true,
+        company_id: item.company_id || companyId
+      };
+      
+      // Garantir que subreceitas tenham a unidade correta
+      if (product.product_type === 'subreceita' && product.unit.toLowerCase() !== 'kg') {
+        console.warn(`Subreceita ${product.name} (${product.id}) não está com unidade 'kg'. Corrigindo...`);
+        product.unit = 'kg';
+      }
+      
+      return product;
+    });
+  } catch (error) {
+    console.error(`[PRODUCTS] Erro ao buscar produtos do tipo ${type}:`, error);
+    toast.error(`Erro ao carregar produtos do tipo ${type}`);
+    return [];
+  }
+}
+
+/**
+ * Busca um produto pelo ID
+ * @param id ID do produto
+ * @param companyId ID da empresa
+ * @returns O produto encontrado ou null se não existir
+ */
 export async function getProduct(id: string, companyId: string): Promise<Product | null> {
   if (!companyId) {
     console.warn("[getProduct] companyId ausente - sessão possivelmente expirada");
@@ -181,34 +288,43 @@ export async function getProduct(id: string, companyId: string): Promise<Product
     if (error) throw error;
     
     if (data) {
-      return {
+      // Garantir que todos os campos necessários estejam presentes
+      const product: Product = {
         id: data.id,
         name: data.name,
-        unit: data.unit,
-        sku: data.sku,
-        supplier: data.supplier,
-        cost: data.cost,
-        min_stock: data.min_stock,
-        current_stock: data.current_stock,
-        recipe_id: data.recipe_id,
-        unit_price: data.unit_price,
-        unit_weight: data.unit_weight,
-        kg_weight: data.kg_weight,
-        group_id: data.group_id,
-        subgroup_id: data.subgroup_id,
-        product_type: data.product_type as ProductType | undefined,
-        code: data.code,
-        all_days: data.all_days,
-        monday: data.monday,
-        tuesday: data.tuesday,
-        wednesday: data.wednesday,
-        thursday: data.thursday,
-        friday: data.friday,
-        saturday: data.saturday,
-        sunday: data.sunday,
-        ativo: data.ativo ?? true,
-        company_id: data.company_id ?? companyId
+        unit: data.unit || 'UN', // Valor padrão para unidade
+        sku: data.sku || '',
+        supplier: data.supplier || 'Produção Interna',
+        cost: data.cost || 0,
+        min_stock: data.min_stock || 0,
+        current_stock: data.current_stock || 0,
+        recipe_id: data.recipe_id || null,
+        unit_price: data.unit_price || 0,
+        unit_weight: data.unit_weight || null,
+        kg_weight: data.kg_weight || null,
+        group_id: data.group_id || null,
+        subgroup_id: data.subgroup_id || null,
+        product_type: (data.product_type as ProductType) || 'materia_prima',
+        code: data.code || null,
+        all_days: data.all_days || false,
+        monday: data.monday || false,
+        tuesday: data.tuesday || false,
+        wednesday: data.wednesday || false,
+        thursday: data.thursday || false,
+        friday: data.friday || false,
+        saturday: data.saturday || false,
+        sunday: data.sunday || false,
+        ativo: data.ativo !== undefined ? data.ativo : true,
+        company_id: data.company_id || companyId
       };
+      
+      // Garantir que subreceitas tenham a unidade correta
+      if (product.product_type === 'subreceita' && product.unit.toLowerCase() !== 'kg') {
+        console.warn(`Subreceita ${product.name} (${product.id}) não está com unidade 'kg'. Corrigindo...`);
+        product.unit = 'kg';
+      }
+      
+      return product;
     }
     return null;
   } catch (error) {
@@ -227,6 +343,8 @@ export async function findProductByNameAndType(
     console.warn("[findProductByNameAndType] companyId ausente - sessão possivelmente expirada");
     throw new Error("Sessão inválida ou empresa não selecionada");
   }
+  console.log(`[PRODUCTS] Buscando produto por nome e tipo: ${name}, ${type}`);
+  
   try {
     const { data, error } = await supabase
       .from('products')
@@ -235,8 +353,46 @@ export async function findProductByNameAndType(
       .eq('product_type', type)
       .eq('company_id', companyId)
       .maybeSingle();
+      
     if (error) throw error;
-    return data || null;
+    
+    if (!data) {
+      console.log(`[PRODUCTS] Nenhum produto encontrado com o nome "${name}" e tipo "${type}"`);
+      return null;
+    }
+    
+    // Garantir que todos os campos necessários estejam presentes
+    const product: Product = {
+      id: data.id,
+      name: data.name,
+      unit: data.unit || (type === 'subreceita' ? 'kg' : 'UN'),
+      sku: data.sku || '',
+      supplier: data.supplier || 'Produção Interna',
+      cost: data.cost || 0,
+      min_stock: data.min_stock || 0,
+      current_stock: data.current_stock || 0,
+      recipe_id: data.recipe_id || null,
+      unit_price: data.unit_price || 0,
+      unit_weight: data.unit_weight || null,
+      kg_weight: data.kg_weight || (type === 'subreceita' ? 1 : null),
+      group_id: data.group_id || null,
+      subgroup_id: data.subgroup_id || null,
+      product_type: (data.product_type as ProductType) || 'materia_prima',
+      code: data.code || null,
+      all_days: data.all_days || false,
+      monday: data.monday || false,
+      tuesday: data.tuesday || false,
+      wednesday: data.wednesday || false,
+      thursday: data.thursday || false,
+      friday: data.friday || false,
+      saturday: data.saturday || false,
+      sunday: data.sunday || false,
+      ativo: data.ativo !== undefined ? data.ativo : true,
+      company_id: data.company_id || companyId
+    };
+    
+    console.log(`[PRODUCTS] Produto encontrado:`, product);
+    return product;
   } catch (error) {
     console.error(`[PRODUCTS] Error finding product by name and type:`, error);
     return null;
@@ -302,14 +458,33 @@ export async function createProduct(productData: Omit<Product, 'id'>, companyId:
     console.warn("[createProduct] companyId ausente - sessão possivelmente expirada");
     throw new Error("Sessão inválida ou empresa não selecionada");
   }
+  
   // Proteção extra: remova campo 'type' se existir
   if ('type' in productData) {
     delete (productData as any).type;
   }
+  
   console.log("[PRODUCTS] Creating new product:", productData.name);
+  
   try {
+    // Se for uma subreceita, garantir que a unidade seja 'kg' e que o kg_weight esteja definido
+    if (productData.product_type === 'subreceita') {
+      console.log("[PRODUCTS] Criando subreceita, garantindo unidade 'kg' e kg_weight");
+      productData.unit = 'kg';
+      
+      // Se não houver kg_weight definido, definir um valor padrão
+      if (!productData.kg_weight || productData.kg_weight <= 0) {
+        productData.kg_weight = 1; // Usar 1kg como padrão
+        console.warn(`[PRODUCTS] kg_weight não definido para nova subreceita. Usando valor padrão: 1kg`);
+      }
+      
+      // Garantir que unit_weight seja nulo para subreceitas
+      productData.unit_weight = null;
+    }
+    
     const validationError = validateProduct(productData);
     if (validationError) {
+      console.error("[PRODUCTS] Erro de validação ao criar produto:", validationError);
       toast.error(validationError);
       return null;
     }
@@ -365,22 +540,41 @@ export async function updateProduct(id: string, productData: Partial<Product>, c
     console.warn("[updateProduct] companyId ausente - sessão possivelmente expirada");
     throw new Error("Sessão inválida ou empresa não selecionada");
   }
+  
   // Proteção extra: remova campo 'type' se existir
   if ('type' in productData) {
     delete (productData as any).type;
   }
+  
   console.log(`[PRODUCTS] Updating product ${id}:`, productData);
+  
   try {
     const currentProduct = await getProduct(id, companyId);
     if (!currentProduct) {
       toast.error("Produto não encontrado");
       return null;
     }
+    
+    // Se for uma subreceita, garantir que a unidade seja 'kg' e que o kg_weight esteja definido
+    if (productData.product_type === 'subreceita' || currentProduct.product_type === 'subreceita') {
+      console.log("[PRODUCTS] Atualizando subreceita, garantindo unidade 'kg' e kg_weight");
+      productData.unit = 'kg';
+      
+      // Se não houver kg_weight definido, tentar usar o valor atual ou definir um padrão
+      if (!productData.kg_weight) {
+        productData.kg_weight = currentProduct.kg_weight || 1; // Usar 1kg como padrão se não houver valor
+        console.warn(`[PRODUCTS] kg_weight não definido para subreceita ${id}. Usando valor padrão: ${productData.kg_weight}kg`);
+      }
+      
+      // Garantir que unit_weight seja nulo para subreceitas
+      productData.unit_weight = null;
+    }
 
     const updatedProduct = {
       ...currentProduct,
       ...productData
     };
+    
     // Remover qualquer campo is_active residual ANTES de validar/enviar
     delete (updatedProduct as any).is_active;
 

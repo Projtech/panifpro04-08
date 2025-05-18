@@ -1,5 +1,10 @@
-
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Loader2, Printer } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -128,6 +133,9 @@ export default function MaterialsCalculator({
       <DialogContent className="sm:max-w-[700px]">
         <DialogHeader>
           <DialogTitle>Lista de Materiais Consolidada</DialogTitle>
+          <DialogDescription>
+            Lista consolidada de todos os materiais necessários para a produção.
+          </DialogDescription>
         </DialogHeader>
         
         <div className="py-4">

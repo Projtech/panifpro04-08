@@ -592,20 +592,18 @@ function Products() {
       <Dialog 
         open={editOpen} 
         onOpenChange={(open) => {
-          // Primeiro atualiza o estado do diálogo
-          setEditOpen(open);
-          
-          // Se estiver fechando o diálogo
           if (!open) {
-            // Aumentando o timeout para dar mais tempo para operações pendentes finalizarem
-            // Timeout maior para garantir que todas as animações e operações do DOM terminem
-            setTimeout(() => {
-              // Verificar se o diálogo ainda está fechado antes de limpar
-              if (!editOpen) {
-                setSelectedProduct(null);
-                console.log('[Products] Limpando selectedProduct após fechar diálogo');
-              }
-            }, 500);
+            // Primeiro feche o diálogo
+            setEditOpen(false);
+            // Depois de um tempo seguro, limpe o produto selecionado
+            const timeoutId = window.setTimeout(() => {
+              setSelectedProduct(null);
+              console.log('[Products] Limpando selectedProduct após fechar diálogo');
+            }, 300);
+            // Armazene o ID do timeout para limpeza se necessário
+            return () => window.clearTimeout(timeoutId);
+          } else {
+            setEditOpen(true);
           }
         }}
       >
@@ -633,7 +631,7 @@ function Products() {
             >
               <div className="product-form-container">
                 <ProductForm
-                  key={`edit-${selectedProduct.id}-${Date.now()}`} // Garantir nova instância a cada abertura
+                  key={`edit-${selectedProduct.id}`} // Usa apenas o ID como chave estável
                   initialData={selectedProduct}
                   onSubmit={handleEditSubmit}
                   onCancel={() => {

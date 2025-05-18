@@ -107,24 +107,7 @@ export default function Sidebar() {
             </Link>
           ))}
           
-          {/* Link de Gerenciamento de Usuários - Apenas para administradores */}
-          {isAdmin && (
-            <Link
-              to="/users"
-              className={cn(
-                "flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors",
-                location.pathname === "/users"
-                  ? "bg-bakery-amber text-white"
-                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-white"
-              )}
-            >
-              <Users
-                className={cn("flex-shrink-0", collapsed ? "mx-auto" : "mr-3")}
-                size={20}
-              />
-              {!collapsed && <span>Gerenciar Usuários</span>}
-            </Link>
-          )}
+
         </nav>
       </div>
     </div>

@@ -112,19 +112,37 @@ const ProductForm: React.FC<ProductFormProps> = ({
   // Refs para controlar timeouts e cancelar operações pendentes
   const pendingTimeoutsRef = useRef<number[]>([]);
   
-  // Efeito para limpar a ref quando o componente for desmontado
+  // Efeito para gerenciar o ciclo de vida do componente
   useEffect(() => {
     console.log('[ProductForm] Componente montado, isMounted=true');
     
+    // Garantir que o componente está marcado como montado no início
+    isMounted.current = true;
+    
+    // Cancelar qualquer animação de frame pendente
+    let rafId: number | null = null;
+    
+    // Função para cancelar todas as animações de frame pendentes
+    const cancelPendingAnimations = () => {
+      if (rafId !== null) {
+        window.cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+    };
+    
     return () => {
+      // Cancelar animações pendentes
+      cancelPendingAnimations();
+      
       // Limpar todos os timeouts pendentes
       pendingTimeoutsRef.current.forEach(timeoutId => {
         window.clearTimeout(timeoutId);
       });
+      pendingTimeoutsRef.current = [];
       
       // Marcar componente como desmontado
       isMounted.current = false;
-      console.log('[ProductForm] Componente desmontado, isMounted=false, timeouts limpos');
+      console.log('[ProductForm] Componente desmontado, isMounted=false, timeouts e animações limpos');
     };
   }, []);
 
@@ -242,9 +260,11 @@ const ProductForm: React.FC<ProductFormProps> = ({
     }
   }, [pesoComprado, valorPago, formData.product_type]);
 
-  // Função segura para atualização de estado
+  // Função segura para atualização de estado - implementação síncrona
   const safeSetState = <T,>(setter: React.Dispatch<React.SetStateAction<T>>, value: React.SetStateAction<T>) => {
+    // Verificação síncrona para evitar problemas de timing
     if (isMounted.current) {
+      // Atualização direta do estado sem requestAnimationFrame
       setter(value);
     } else {
       console.log('[ProductForm] Tentativa de atualizar estado em componente desmontado evitada');
@@ -397,10 +417,19 @@ const ProductForm: React.FC<ProductFormProps> = ({
       }
     }
 
-    safeSetState(setFormData, prev => ({ ...prev, [key]: newValue }));
-
-    if (errors[key]) {
-      safeSetState(setErrors, prev => { const newErrors = { ...prev }; delete newErrors[key]; return newErrors; });
+    // Atualização síncrona do estado
+    if (isMounted.current) {
+      setFormData(prev => ({ ...prev, [key]: newValue }));
+      
+      if (errors[key]) {
+        setErrors(prev => { 
+          const newErrors = { ...prev }; 
+          delete newErrors[key]; 
+          return newErrors; 
+        });
+      }
+    } else {
+      console.log('[ProductForm] Tentativa de atualizar estado em componente desmontado evitada');
     }
   }, [errors, isFieldDisabled]); // Added isFieldDisabled
 
@@ -425,47 +454,53 @@ const ProductForm: React.FC<ProductFormProps> = ({
        }
      }
 
+    // Atualização síncrona do estado
+    if (isMounted.current) {
+      setFormData(prev => {
+        const updatedState = { ...prev, [key]: processedValue };
 
-    safeSetState(setFormData, prev => {
-      const updatedState = { ...prev, [key]: processedValue };
-
-      if (key === 'product_type') {
-        if (processedValue === 'materia_prima') {
-          updatedState.unit = 'Kg';
-          updatedState.cost = null; // Será calculado
-          safeSetState(setPesoComprado, '');
-          safeSetState(setValorPago, '');
-          safeSetState(setCustoCalculado, 0);
-        } else {
-          // Reset cost if changing *from* materia_prima
-          if (prev.product_type === 'materia_prima') updatedState.cost = null;
-          // If changing TO recipe/subrecipe, ensure unit is UN? (Handled by DB link usually)
-          // No: ProductForm shouldn't create recipes, only link existing ones or materia prima
+        if (key === 'product_type') {
+          if (processedValue === 'materia_prima') {
+            updatedState.unit = 'Kg';
+            updatedState.cost = null; // Será calculado
+            
+            // Atualizar estados relacionados de forma síncrona
+            setPesoComprado('');
+            setValorPago('');
+            setCustoCalculado(0);
+          } else {
+            // Reset cost if changing *from* materia_prima
+            if (prev.product_type === 'materia_prima') updatedState.cost = null;
+          }
         }
+
+        if (key === 'group_id') {
+          updatedState.subgroup_id = null;
+        }
+
+        // Clear unit_price if unit changes to Kg
+        if (key === 'unit' && processedValue === 'Kg') {
+            updatedState.unit_price = null;
+        }
+        
+        // Clear kg_weight/unit_weight based on unit selection
+        if (key === 'unit') {
+            if (processedValue === 'Kg') updatedState.unit_weight = null;
+            if (processedValue === 'UN') updatedState.kg_weight = null;
+        }
+
+        return updatedState;
+      });
+
+      if (errors[key]) {
+        setErrors(prev => { 
+          const newErrors = { ...prev }; 
+          delete newErrors[key]; 
+          return newErrors; 
+        });
       }
-
-      if (key === 'group_id') {
-        updatedState.subgroup_id = null;
-      }
-
-      // Clear unit_price if unit changes to Kg
-      if (key === 'unit' && processedValue === 'Kg') {
-          updatedState.unit_price = null;
-      }
-      // Clear kg_weight if unit changes to UN (assuming kg_weight is price/kg)
-      // Or clear unit_weight if unit changes to Kg? Depends on meaning.
-      // Let's assume kg_weight/unit_weight are set based on unit, clear the other one.
-      if (key === 'unit') {
-          if (processedValue === 'Kg') updatedState.unit_weight = null;
-          if (processedValue === 'UN') updatedState.kg_weight = null;
-      }
-
-
-      return updatedState;
-    });
-
-    if (errors[key]) {
-      safeSetState(setErrors, prev => { const newErrors = { ...prev }; delete newErrors[key]; return newErrors; });
+    } else {
+      console.log('[ProductForm] Tentativa de atualizar estado em componente desmontado evitada');
     }
   }, [errors, isFieldDisabled]); // Added isFieldDisabled
 

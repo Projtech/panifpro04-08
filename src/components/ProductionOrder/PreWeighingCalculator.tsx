@@ -1,4 +1,11 @@
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Loader2, Printer } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -163,6 +170,9 @@ export default function PreWeighingCalculator({
       <DialogContent className="sm:max-w-[800px]">
         <DialogHeader>
           <DialogTitle>Lista de Pré-Pesagem</DialogTitle>
+          <DialogDescription>
+            Lista de materiais para pré-pesagem dos ingredientes da receita.
+          </DialogDescription>
         </DialogHeader>
         
         <div className="py-4 space-y-6">

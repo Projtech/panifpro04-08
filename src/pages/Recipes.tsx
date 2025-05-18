@@ -18,6 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import {
   Plus, 
@@ -348,7 +349,14 @@ export default function Recipes() {
                       <TableRow key={recipe.id}>
                         <TableCell className="font-medium flex items-center">
                           <CakeSlice className="h-4 w-4 mr-2 text-bakery-amber" />
-                          {recipe.name}
+                          <div>
+                            {recipe.name}
+                            {recipe.code?.startsWith('SUB') && (
+                              <Badge variant="secondary" className="ml-2 bg-blue-100 text-blue-800">
+                                Subreceita
+                              </Badge>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell>{recipe.code || '-'}</TableCell>
                         <TableCell>
@@ -424,11 +432,11 @@ export default function Recipes() {
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>Confirmar exclusão</DialogTitle>
+            <DialogDescription>
+              Tem certeza que deseja excluir a receita <span className="font-semibold">{recipeToDelete?.name}</span>?
+              Esta ação não pode ser desfeita.
+            </DialogDescription>
           </DialogHeader>
-          <p className="py-4">
-            Tem certeza que deseja excluir a receita <span className="font-semibold">{recipeToDelete?.name}</span>?
-            Esta ação não pode ser desfeita.
-          </p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)} disabled={loading}>
               Cancelar
@@ -450,9 +458,11 @@ export default function Recipes() {
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>Gerar PDF da Receita</DialogTitle>
+            <DialogDescription>
+              Escolha o tipo de PDF para {selectedRecipe?.name}:
+            </DialogDescription>
           </DialogHeader>
           <div className="py-4">
-            <p className="mb-4">Escolha o tipo de PDF para {selectedRecipe?.name}:</p>
             <div className="space-y-3">
               <Button 
                 className="w-full justify-start" 
