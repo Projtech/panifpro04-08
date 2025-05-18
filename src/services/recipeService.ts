@@ -111,14 +111,16 @@ export async function getRecipe(id: string, companyId: string): Promise<Recipe |
       .from('recipes')
       .select('*')
       .eq('id', id)
-      .eq('company_id', companyId)
-      .single();
+      .eq('company_id', companyId);
     
     if (error) throw error;
-    if (!data) return null;
+    if (!data || data.length === 0) return null;
+    
+    // Pegar o primeiro item do array
+    const recipeData = data[0];
     
     // Garantir que todos os campos opcionais estejam definidos mesmo que sejam nulos
-    const supabaseData = data as SupabaseRecipeData;
+    const supabaseData = recipeData as SupabaseRecipeData;
     const recipe: Recipe = {
       ...supabaseData,
       group_id: supabaseData.group_id || null,
@@ -144,17 +146,24 @@ export async function getRecipe(id: string, companyId: string): Promise<Recipe |
 export async function getRecipeWithIngredients(id: string, companyId: string): Promise<{recipe: Recipe | null, ingredients: RecipeIngredientWithDetails[]}> {
   if (!companyId) throw new Error('[getRecipeWithIngredients] companyId é obrigatório');
   try {
-    const { data: recipeData, error: recipeError } = await supabase
+    const { data: recipeDataArray, error: recipeError } = await supabase
       .from('recipes')
       .select('*')
       .eq('id', id)
-      .eq('company_id', companyId)
-      .single();
+      .eq('company_id', companyId);
     
     if (recipeError) throw recipeError;
     
+    // Verificar se encontrou a receita
+    if (!recipeDataArray || recipeDataArray.length === 0) {
+      return { recipe: null, ingredients: [] };
+    }
+    
+    // Pegar o primeiro item do array
+    const recipeData = recipeDataArray[0];
+    
     // Processar a receita para garantir todos os campos
-    const recipe = recipeData ? {
+    const recipe = {
       ...(recipeData as SupabaseRecipeData),
       group_id: (recipeData as SupabaseRecipeData).group_id || null,
       subgroup_id: (recipeData as SupabaseRecipeData).subgroup_id || null,
@@ -166,7 +175,7 @@ export async function getRecipeWithIngredients(id: string, companyId: string): P
       friday: (recipeData as SupabaseRecipeData).friday || null,
       saturday: (recipeData as SupabaseRecipeData).saturday || null,
       sunday: (recipeData as SupabaseRecipeData).sunday || null
-    } as Recipe : null;
+    } as Recipe;
     
     const { data: ingredientsData, error: ingredientsError } = await supabase
       .from('recipe_ingredients')

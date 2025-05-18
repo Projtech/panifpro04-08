@@ -156,13 +156,12 @@ async function upsertDailyProductionList(
   console.log(`[upsertDailyProductionList] Itens a processar:`, listaAutomatica);
 
   // Buscar lista existente (type='daily', nome, companyId)
-  const { data: existingList, error } = await supabase
+  const { data: existingLists, error } = await supabase
     .from("production_lists")
     .select("id")
     .eq("company_id", companyId)
     .eq("name", nomeLista)
-    .eq("type", "daily")
-    .single();
+    .eq("type", "daily");
 
   if (error) {
     console.error(`[upsertDailyProductionList] Erro ao buscar lista existente:`, error);
@@ -170,7 +169,9 @@ async function upsertDailyProductionList(
   }
 
   let listId: string;
-  if (existingList && existingList.id) {
+  if (existingLists && existingLists.length > 0) {
+    // Pegar o primeiro item se houver múltiplos (não deveria acontecer, mas por segurança)
+    const existingList = existingLists[0];
     console.log(`[upsertDailyProductionList] Lista existente encontrada com ID: ${existingList.id}`);
     // Se existir, sobrescreve
     listId = existingList.id;
