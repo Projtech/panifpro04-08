@@ -315,30 +315,46 @@ const ProductionCalendar = () => {
 
   // Função para exportar o calendário semanal completo em PDF
   const handleExportWeeklyCalendarPDF = async () => {
-    if (!companyId) return;
+    if (!companyId || isExportingPDF) return;
     
     try {
       setIsExportingPDF(true);
-      await exportWeeklyCalendarToPDF(companyId, companyName);
+      // Usar uma referência local para evitar problemas de estado
+      const localCompanyId = companyId;
+      const localCompanyName = companyName;
+      
+      // Adicionar um pequeno atraso para garantir que o estado seja atualizado
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      await exportWeeklyCalendarToPDF(localCompanyId, localCompanyName);
     } catch (error) {
       console.error("Erro ao exportar calendário em PDF:", error);
       toast.error(`Erro ao exportar calendário em PDF: ${error instanceof Error ? error.message : "Erro desconhecido"}`);
     } finally {
+      // Garantir que o estado de carregamento seja desativado mesmo em caso de erro
       setIsExportingPDF(false);
     }
   };
   
   // Função para exportar o calendário semanal completo em Excel
   const handleExportWeeklyCalendarExcel = async () => {
-    if (!companyId) return;
+    if (!companyId || isExportingExcel) return;
     
     try {
       setIsExportingExcel(true);
-      await exportWeeklyCalendarToExcel(companyId, companyName);
+      // Usar uma referência local para evitar problemas de estado
+      const localCompanyId = companyId;
+      const localCompanyName = companyName;
+      
+      // Adicionar um pequeno atraso para garantir que o estado seja atualizado
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      await exportWeeklyCalendarToExcel(localCompanyId, localCompanyName);
     } catch (error) {
       console.error("Erro ao exportar calendário em Excel:", error);
       toast.error(`Erro ao exportar calendário em Excel: ${error instanceof Error ? error.message : "Erro desconhecido"}`);
     } finally {
+      // Garantir que o estado de carregamento seja desativado mesmo em caso de erro
       setIsExportingExcel(false);
     }
   };

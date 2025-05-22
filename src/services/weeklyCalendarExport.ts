@@ -153,15 +153,27 @@ async function getProductsForWeeklyCalendar(companyId: string): Promise<ProductC
   }
 }
 
+// Variável para controlar se uma exportação já está em andamento
+let isExportingPDF = false;
+
 /**
  * Exporta o calendário semanal de produção para PDF
  * @param companyId ID da empresa
  * @param companyName Nome da empresa para o título
  */
 export async function exportWeeklyCalendarToPDF(companyId: string, companyName: string): Promise<void> {
+  // Evitar múltiplas chamadas simultâneas
+  if (isExportingPDF) {
+    console.log('Exportação para PDF já está em andamento. Ignorando nova chamada.');
+    return;
+  }
+  
   let loadingToast: any = null;
   
   try {
+    // Marcar que uma exportação está em andamento
+    isExportingPDF = true;
+    
     // Feedback inicial
     loadingToast = toast.loading('Gerando calendário de produção em PDF...');
     
@@ -412,6 +424,8 @@ export async function exportWeeklyCalendarToPDF(companyId: string, companyName: 
     if (loadingToast) {
       toast.dismiss(loadingToast);
     }
+    // Redefinir a variável de controle para permitir novas exportações
+    isExportingPDF = false;
   }
 }
 
@@ -420,10 +434,21 @@ export async function exportWeeklyCalendarToPDF(companyId: string, companyName: 
  * @param companyId ID da empresa
  * @param companyName Nome da empresa para o título
  */
-export async function exportWeeklyCalendarToExcel(companyId: string, companyName: string): Promise<void> {
-  let loadingToast: any = null;
+let isExportingExcel = false;
 
+export async function exportWeeklyCalendarToExcel(companyId: string, companyName: string): Promise<void> {
+  // Evitar múltiplas chamadas simultâneas
+  if (isExportingExcel) {
+    console.log('Exportação para Excel já está em andamento. Ignorando nova chamada.');
+    return;
+  }
+  
+  let loadingToast: any = null;
+  
   try {
+    // Marcar que uma exportação está em andamento
+    isExportingExcel = true;
+    
     // Feedback inicial
     loadingToast = toast.loading('Gerando calendário de produção em Excel...');
 
@@ -817,6 +842,9 @@ export async function exportWeeklyCalendarToExcel(companyId: string, companyName
       toast.dismiss(loadingToast);
     }
     toast.error(`Erro ao exportar calendário: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+  } finally {
+    // Redefinir a variável de controle para permitir novas exportações
+    isExportingExcel = false;
   }
 }
 
