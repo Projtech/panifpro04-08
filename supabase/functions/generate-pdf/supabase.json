@@ -1,0 +1,17 @@
+{
+  "functions": [
+    {
+      "name": "generate-pdf",
+      "verify_jwt": false,
+      "import_map": "./import_map.json"
+    }
+  ],
+  "cors": {
+    "enabled": true,
+    "origins": ["*"],
+    "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    "headers": ["*"],
+    "expose_headers": ["Content-Range", "X-Content-Range"],
+    "max_age": 86400
+  }
+}

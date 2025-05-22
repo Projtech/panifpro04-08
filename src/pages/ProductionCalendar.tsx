@@ -10,24 +10,29 @@ import {
   RefreshCw,
   Clock,
   FileEdit,
-  Trash2
+  Trash2,
+  FileText,
+  Download
 } from "lucide-react";
 import { toast } from "sonner";
-import { 
-  ProductionList, 
-  ProductionListItem, 
+import {
+  ProductionList,
+  ProductionListItem,
   ProductionListItemWithDetails,
+  ProductItemDetails,
   createProductionList,
   updateProductionList,
   deleteProductionList,
   getProductionListItems,
-  getProductionListItemsWithDetails
+  getProductionListItemsWithDetails,
+  getLastUpdateDate
 } from "@/services/productionListService";
 import { exportToPDF, exportToExcel } from "@/services/exportService";
+import { exportWeeklyCalendarToPDF, exportWeeklyCalendarToExcel } from "@/services/weeklyCalendarExport";
+import { exportToProductionControlExcel } from "@/services/productionControlExport";
 
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-
 
 // Importar componentes UI
 import {
@@ -48,26 +53,62 @@ interface ProductionListWithItems extends ProductionList {
   items?: ProductionListItemWithDetails[];
 }
 
+// Interface estendida para incluir propriedades adicionais necessárias
+interface ExtendedProductItemDetails extends ProductItemDetails {
+  recipe_id?: string | null;
+}
+
+// Interface estendida para incluir recipe
+interface ExtendedProductionListItemWithDetails extends Omit<ProductionListItemWithDetails, 'product'> {
+  product?: ExtendedProductItemDetails;
+  recipe?: {
+    name?: string;
+    unit?: string;
+  };
+}
+
 const ProductionCalendar = () => {
-  
   
   // Estado para manter a hora da última atualização
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  
+  // Estado para loading do botão de atualizar
+  const [isUpdatingDaily, setIsUpdatingDaily] = useState(false);
+  const [isExportingPDF, setIsExportingPDF] = useState(false);
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
   
   // Hook de navegação
   const navigate = useNavigate();
   
   // Hook para obter empresa ativa
-  type AuthContextType = { activeCompany?: { id?: string }, loading?: boolean };
+  type AuthContextType = { activeCompany?: { id?: string, name?: string }, loading?: boolean };
   const { activeCompany, loading: authLoading } = useAuth() as AuthContextType;
   const companyId = activeCompany?.id;
+  const companyName = activeCompany?.name || 'Padaria';
 
   // Hook para gerenciar listas de produção
   const { lists, loading: listsLoading, error: listsError, reloadLists } = useProductionLists(companyId);
-
-  // Novo estado para loading do botão de atualizar
-  const [isUpdatingDaily, setIsUpdatingDaily] = useState<boolean>(false);
   
+  // Efeito para buscar a data da última atualização ao carregar a página
+  useEffect(() => {
+    const fetchLastUpdateDate = async () => {
+      if (!companyId) return;
+      
+      try {
+        const lastDate = await getLastUpdateDate(companyId);
+        if (lastDate) {
+          setLastUpdated(lastDate);
+          setIsInitialLoad(false);
+        }
+      } catch (error) {
+        console.error("Erro ao buscar data da última atualização:", error);
+      }
+    };
+    
+    fetchLastUpdateDate();
+  }, [companyId]);
+
   // Estado para o modal de formulário
   const [isFormModalOpen, setIsFormModalOpen] = useState<boolean>(false);
   const [editingList, setEditingList] = useState<ProductionListWithItems | null>(null);
@@ -75,14 +116,13 @@ const ProductionCalendar = () => {
   const [isLoadingItems, setIsLoadingItems] = useState<boolean>(false);
   const [isSavingList, setIsSavingList] = useState<boolean>(false);
   
-  
-  
   // Handler do botão de atualizar listas diárias
   const handleUpdateDailyLists = async () => {
     if (!companyId) {
-        toast.warning("Nenhuma empresa ativa selecionada.");
-        return;
+      toast.warning("Nenhuma empresa ativa selecionada.");
+      return;
     }
+    
     setIsUpdatingDaily(true);
     try {
       const { generateDailyLists } = await import("@/services/productionListService");
@@ -90,17 +130,26 @@ const ProductionCalendar = () => {
       const result = await generateDailyLists(companyId);
       if (result.success) {
         toast.success("Listas diárias atualizadas com sucesso!");
-        setLastUpdated(new Date());
         await reloadLists();
+        
+        // Buscar a data mais recente do banco de dados após a atualização
+        const lastDate = await getLastUpdateDate(companyId);
+        if (lastDate) {
+          setLastUpdated(lastDate);
+        } else {
+          // Fallback se não conseguir buscar do banco
+          setLastUpdated(new Date());
+        }
       } else {
         console.error("Falha ao gerar listas diárias:", result.error);
         // A função generateDailyLists já mostra um toast de erro no serviço
       }
     } catch (error) {
-      console.error("Erro capturado ao atualizar listas:", error); // Log mais detalhado
+      console.error("Erro capturado ao atualizar listas:", error);
       toast.error("Erro ao atualizar listas diárias");
     } finally {
       setIsUpdatingDaily(false);
+      setIsInitialLoad(false);
     }
   };
 
@@ -221,15 +270,19 @@ const ProductionCalendar = () => {
       console.log("Itens da lista com detalhes:", items);
       
       // Mapear os itens da lista para o formato esperado pelo ProductionOrderForm
-      const produtosParaPedido = items.map((item, index) => ({
-        id: `prelist-item-${index}-${item.product_id}`,
-        recipeId: item.product?.recipe_id || null, // Usar recipe_id do produto
-        recipeName: item.recipe?.name || item.product?.name || 'Produto Desconhecido', // Priorizar nome da receita
-        quantity: parseFloat(item.quantity) || 0,
-        unit: (item.recipe?.unit || item.product?.unit || 'un').toLowerCase(),
-        convertedQuantity: 0,
-        fromCalendar: true // Identificar que vem do calendário
-      }));
+      const produtosParaPedido = items.map((item, index) => {
+        // Cast para o tipo estendido para acessar as propriedades adicionais
+        const extendedItem = item as unknown as ExtendedProductionListItemWithDetails;
+        return {
+          id: `prelist-item-${index}-${item.product_id}`,
+          recipeId: extendedItem.product?.recipe_id || null, // Usar recipe_id do produto
+          recipeName: extendedItem.recipe?.name || extendedItem.product?.name || 'Produto Desconhecido', // Priorizar nome da receita
+          quantity: parseFloat(String(item.quantity)) || 0, // Converter para string antes de usar parseFloat
+          unit: (extendedItem.recipe?.unit || extendedItem.product?.unit || 'un').toLowerCase(),
+          convertedQuantity: 0,
+          fromCalendar: true // Identificar que vem do calendário
+        };
+      });
       
       // Navegar para a tela de criação de pedido
       navigate('/production-orders/new', {
@@ -259,6 +312,38 @@ const ProductionCalendar = () => {
       // O toast de erro já está sendo tratado na função exportToPDF
     }
   };
+
+  // Função para exportar o calendário semanal completo em PDF
+  const handleExportWeeklyCalendarPDF = async () => {
+    if (!companyId) return;
+    
+    try {
+      setIsExportingPDF(true);
+      await exportWeeklyCalendarToPDF(companyId, companyName);
+    } catch (error) {
+      console.error("Erro ao exportar calendário em PDF:", error);
+      toast.error(`Erro ao exportar calendário em PDF: ${error instanceof Error ? error.message : "Erro desconhecido"}`);
+    } finally {
+      setIsExportingPDF(false);
+    }
+  };
+  
+  // Função para exportar o calendário semanal completo em Excel
+  const handleExportWeeklyCalendarExcel = async () => {
+    if (!companyId) return;
+    
+    try {
+      setIsExportingExcel(true);
+      await exportWeeklyCalendarToExcel(companyId, companyName);
+    } catch (error) {
+      console.error("Erro ao exportar calendário em Excel:", error);
+      toast.error(`Erro ao exportar calendário em Excel: ${error instanceof Error ? error.message : "Erro desconhecido"}`);
+    } finally {
+      setIsExportingExcel(false);
+    }
+  };
+
+  // Removida a função handleExportProductionControlReport
 
   // Função para exportar lista para Excel
   const handleExportExcel = async (list: ProductionListWithItems) => {
@@ -311,9 +396,37 @@ return (
         <Button variant="outline" size="icon" onClick={handleUpdateDailyLists} disabled={isUpdatingDaily}>
           {isUpdatingDaily ? <Loader2 className="animate-spin h-4 w-4" /> : <RefreshCw className="h-4 w-4" />}
         </Button>
-        <span className="text-xs text-muted-foreground ml-2">
-          Última atualização: {lastUpdated ? format(lastUpdated, "dd/MM/yyyy HH:mm", { locale: ptBR }) : "-"}
-        </span>
+        
+        {/* Botão para exportar calendário em PDF */}
+        <Button 
+          variant="outline" 
+          className="flex items-center gap-2" 
+          onClick={handleExportWeeklyCalendarPDF} 
+          disabled={isExportingPDF || !companyId}
+        >
+          {isExportingPDF ? <Loader2 className="animate-spin h-4 w-4" /> : <FileText className="h-4 w-4" />}
+          Exportar Calendário PDF
+        </Button>
+        
+        {/* Botão para exportar calendário em Excel */}
+        <Button 
+          variant="outline" 
+          className="flex items-center gap-2" 
+          onClick={handleExportWeeklyCalendarExcel} 
+          disabled={isExportingExcel || !companyId}
+        >
+          {isExportingExcel ? <Loader2 className="animate-spin h-4 w-4" /> : <Download className="h-4 w-4" />}
+          Exportar Calendário Excel
+        </Button>
+        <div className="flex items-center text-xs text-muted-foreground ml-2 bg-muted/50 px-2 py-1 rounded-md border">
+          <Clock className="h-3 w-3 mr-1" />
+          <span>Última atualização: </span>
+          <span className="font-medium ml-1">
+            {lastUpdated 
+              ? format(lastUpdated, "dd/MM/yyyy 'às' HH'h'mm", { locale: ptBR })
+              : isInitialLoad ? "Nunca" : "-"}
+          </span>
+        </div>
         <Button variant="default" onClick={handleOpenNewListForm} className="ml-4">
           <Plus className="h-4 w-4 mr-2" /> Nova lista personalizada
         </Button>

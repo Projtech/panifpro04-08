@@ -597,6 +597,31 @@ export async function calculateProductQuantity(productId: string, companyId: str
   }
 }
 
+// Buscar a última data de atualização das listas diárias
+export async function getLastUpdateDate(companyId: string): Promise<Date | null> {
+  if (!companyId) return null;
+  
+  try {
+    // Buscar a lista diária mais recente
+    const { data, error } = await supabase
+      .from("production_lists")
+      .select("updated_at")
+      .eq("company_id", companyId)
+      .eq("type", "daily")
+      .order("updated_at", { ascending: false })
+      .limit(1);
+    
+    if (error) throw error;
+    if (!data || data.length === 0) return null;
+    
+    // Retornar a data de atualização mais recente
+    return new Date(data[0].updated_at);
+  } catch (error) {
+    console.error("Erro ao buscar data da última atualização:", error);
+    return null;
+  }
+}
+
 // Gerar/atualizar as 7 listas diárias
 export async function generateDailyLists(companyId: string, userId?: string): Promise<{ success: boolean, lists?: string[], error?: any }> {
   if (!companyId) throw new Error('[generateDailyLists] companyId é obrigatório');

@@ -1,0 +1,7 @@
+{
+  "name": "generate-pdf",
+  "version": "1.0.0",
+  "description": "Função para gerar PDF no servidor Supabase",
+  "memory": 1024,
+  "timeout": 60
+}

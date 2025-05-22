@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { Play, FileText, Download, Pencil, Trash } from "lucide-react";
+import { Play, FileText, Download, Pencil, Trash, FileSpreadsheet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -16,10 +15,12 @@ import {
   ProductionList, 
   ProductionListItemWithDetails 
 } from "@/services/productionListService";
+import { exportToProductionControlExcel } from "@/services/productionControlExport";
 
 // Interface estendida para incluir os itens
 interface ProductionListWithItems extends ProductionList {
   items?: ProductionListItemWithDetails[];
+  company_id: string; // Adicionar propriedade company_id
 }
 
 interface ProductionListActionsProps {
@@ -27,6 +28,7 @@ interface ProductionListActionsProps {
   onGenerateOrder?: (list: ProductionListWithItems) => void;
   onExportPDF?: (list: ProductionListWithItems) => void;
   onExportExcel?: (list: ProductionListWithItems) => void;
+  onExportProductionControl?: (list: ProductionListWithItems) => void;
   onEdit?: (list: ProductionListWithItems) => void;
   onDelete?: (list: ProductionListWithItems) => void;
 }
@@ -36,6 +38,7 @@ export default function ProductionListActions({
   onGenerateOrder,
   onExportPDF,
   onExportExcel,
+  onExportProductionControl,
   onEdit,
   onDelete,
 }: ProductionListActionsProps) {
@@ -67,6 +70,8 @@ export default function ProductionListActions({
       >
         <FileText className="h-4 w-4 text-blue-600" />
       </Button>
+      
+      {/* Botão de programação de PDF removido */}
 
       {/* Botão para exportar Excel */}
       <Button
@@ -76,6 +81,23 @@ export default function ProductionListActions({
         title="Exportar para Excel"
       >
         <Download className="h-4 w-4 text-green-700" />
+      </Button>
+
+      {/* Botão para exportar Controle de Produção */}
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={() => {
+          if (onExportProductionControl) {
+            onExportProductionControl(list);
+          } else {
+            // Exportar diretamente se não houver handler
+            exportToProductionControlExcel(list.id, list.name, list.company_id);
+          }
+        }}
+        title="Exportar Controle de Produção"
+      >
+        <FileSpreadsheet className="h-4 w-4 text-purple-600" />
       </Button>
 
       {/* Botões de edição e exclusão só para listas personalizadas */}
@@ -123,6 +145,8 @@ export default function ProductionListActions({
           </AlertDialog>
         </>
       )}
+      
+      {/* Modal de programação de PDF removido */}
     </div>
   );
 }
