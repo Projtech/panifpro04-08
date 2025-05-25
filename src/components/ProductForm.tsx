@@ -33,6 +33,7 @@ export interface ProductFormData {
   min_stock: number | null; // Added based on DB schema/previous discussion
   group_id: string | null; // Store as string
   subgroup_id: string | null; // Store as string
+  setor_id: string | null; // Store as string (OPCIONAL)
   kg_weight: number | null;
   unit_price: number | null;
   unit_weight: number | null;
@@ -53,9 +54,10 @@ export interface ProductFormData {
 };
 
 // Interface para os dados que serão enviados via onSubmit (convertendo IDs)
-export interface SubmissionData extends Omit<ProductFormData, 'group_id' | 'subgroup_id' | 'company_id' | 'recipe_id'> {
+export interface SubmissionData extends Omit<ProductFormData, 'group_id' | 'subgroup_id' | 'setor_id' | 'company_id' | 'recipe_id'> {
   group_id: string | null; // Keep as string if service expects string UUID
   subgroup_id: string | null; // Keep as string if service expects string UUID
+  setor_id: string | null; // Keep as string if service expects string UUID
   company_id: string; // Ensure it's not null for submission
   recipe_id: string | null;
 };
@@ -68,6 +70,7 @@ export interface ProductFormProps {
   isEditMode: boolean;
   groups: Group[]; // Assume Group has { id: string; name: string; ... }
   subgroups: Subgroup[]; // Assume Subgroup has { id: string; name: string; group_id: string; ... }
+  setores?: { id: string; name: string; color?: string | null }[]; // Lista de setores disponíveis
   forceProductType?: ProductType; // NOVO: força o tipo de produto (string para aceitar 'raw_material')
 }
 
@@ -104,6 +107,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
   isEditMode,
   groups,
   subgroups,
+  setores = [],
   forceProductType
 }) => {
   // Ref para controlar se o componente está montado
@@ -185,6 +189,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
     min_stock: 0, // Default min_stock to 0
     group_id: null, // string | null
     subgroup_id: null, // string | null
+    setor_id: null, // string | null (OPCIONAL)
     kg_weight: null,
     unit_price: null,
     unit_weight: null,
@@ -1041,6 +1046,30 @@ const ProductForm: React.FC<ProductFormProps> = ({
                     </div>
                   </div>
                   {errors.monday && <p className="text-red-500 text-xs mt-1">{errors.monday}</p>}
+                </div>
+
+                {/* Campo de Setor (opcional) */}
+                <div className="col-span-6 sm:col-span-3">
+                  <label htmlFor="setor_id" className="block text-sm font-medium text-gray-700">
+                    Setor (opcional)
+                  </label>
+                  <select
+                    id="setor_id"
+                    name="setor_id"
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 sm:text-sm"
+                    value={formData.setor_id || ''}
+                    onChange={(e) => setFormData({ ...formData, setor_id: e.target.value || null })}
+                  >
+                    <option value="">Selecione um setor</option>
+                    {setores.map((setor) => (
+                      <option key={setor.id} value={setor.id}>
+                        {setor.name}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-xs text-gray-500">
+                    Selecione o setor responsável pela produção deste item
+                  </p>
                 </div>
 
                 {/* Produto Ativo */}

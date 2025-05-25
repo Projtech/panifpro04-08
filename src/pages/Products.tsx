@@ -3,14 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { DraggableTable } from "@/components/ui/draggable-table";
 import {
   Dialog,
   DialogContent,
@@ -52,6 +45,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { getProducts, createProduct, updateProduct, deleteProduct, Product, checkProductNameExists, checkProductSkuExists } from "@/services/productService";
 import { getGroups, getSubgroups, Group, Subgroup } from "@/services/groupService";
+import { getSetores, Setor } from "@/services/setorService";
 import { useAuth } from '@/contexts/AuthContext';
 import { formatCurrency, formatDecimal } from "@/lib/formatters";
 import { parseDecimalBR, formatInputDecimalBR } from "@/lib/numberUtils";
@@ -72,6 +66,7 @@ function Products() {
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
   const [groups, setGroups] = useState<Group[]>([]);
   const [subgroups, setSubgroups] = useState<Subgroup[]>([]);
+  const [setores, setSetores] = useState<Setor[]>([]);
   const [filteredSubgroups, setFilteredSubgroups] = useState<Subgroup[]>([]);
   
   // Filtros de tipo de produto
@@ -83,6 +78,9 @@ function Products() {
 
   // Filtro de status (ativo/inativo)
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  
+  // Filtro de setor
+  const [setorFilter, setSetorFilter] = useState<string>('all');
   
   const navigate = useNavigate();
   const location = useLocation();
@@ -138,6 +136,24 @@ function Products() {
       toast.error("Erro ao carregar subgrupos");
     }
   };
+  
+  const fetchSetores = async () => {
+    if (authLoading || !activeCompany?.id) {
+      toast.error("Empresa ativa não carregada. Tente novamente mais tarde.");
+      return;
+    }
+    try {
+      const setoresData = await getSetores(activeCompany.id);
+      setSetores(setoresData);
+    } catch (error) {
+      if (error instanceof Error) {
+        console.error("[fetchSetores] Erro ao carregar setores:", error.message, error.stack);
+      } else {
+        console.error("[fetchSetores] Erro ao carregar setores (objeto desconhecido):", JSON.stringify(error));
+      }
+      toast.error("Erro ao carregar setores");
+    }
+  };
 
   const fetchProducts = async () => {
     if (authLoading || !activeCompany?.id) {
@@ -170,6 +186,7 @@ function Products() {
     fetchProducts();
     fetchGroups();
     fetchSubgroups();
+    fetchSetores();
 
     // Configurar intervalo de atualização automática
     refreshTimerRef.current = setInterval(() => {
@@ -200,28 +217,36 @@ function Products() {
 
   const filteredProducts = products
     .filter(product => {
-      // Filtro de texto
-      const textMatch = 
-        (product.name ? product.name.toLowerCase().includes(search.toLowerCase()) : false) ||
-        (product.sku && product.sku.toLowerCase().includes(search.toLowerCase())) ||
-        (product.supplier ? product.supplier.toLowerCase().includes(search.toLowerCase()) : false);
+      // Filtrar por termo de busca
+      if (search && !product.name.toLowerCase().includes(search.toLowerCase())) {
+        return false;
+      }
       
-      // Filtro por tipo de produto
-      const typeMatch = (
-        (product.product_type === 'materia_prima' && typeFilters.materiaPrima) ||
-        (product.product_type === 'subreceita' && typeFilters.subReceita) ||
-        (product.product_type === 'receita' && typeFilters.receita) ||
-        // Se product_type for null ou indefinido, mostrar em todos os filtros
-        (!product.product_type && (typeFilters.materiaPrima || typeFilters.subReceita || typeFilters.receita))
-      );
+      // Filtrar por tipo de produto
+      if (product.product_type === 'materia_prima' && !typeFilters.materiaPrima) {
+        return false;
+      }
+      if (product.product_type === 'subreceita' && !typeFilters.subReceita) {
+        return false;
+      }
+      if (product.product_type === 'receita' && !typeFilters.receita) {
+        return false;
+      }
       
-      // Filtro por status (ativo/inativo)
-      const statusMatch = 
-        statusFilter === 'all' || 
-        (statusFilter === 'active' && product.ativo !== false) || 
-        (statusFilter === 'inactive' && product.ativo === false);
+      // Filtrar por status (ativo/inativo)
+      if (statusFilter === 'active' && product.ativo === false) {
+        return false;
+      }
+      if (statusFilter === 'inactive' && product.ativo !== false) {
+        return false;
+      }
       
-      return textMatch && typeMatch && statusMatch;
+      // Filtrar por setor
+      if (setorFilter !== 'all' && product.setor_id !== setorFilter) {
+        return false;
+      }
+      
+      return true;
     })
     .sort((a, b) => a.name ? (b.name ? a.name.localeCompare(b.name) : -1) : 1);
 
@@ -293,22 +318,43 @@ function Products() {
               <div className="flex flex-1 flex-wrap items-center gap-4">
                 {/* Filtros de tipo */}
                 <div className="flex items-center gap-4 flex-wrap">
-                  {/* Filtro por status (ativo/inativo) */}
-                  <div className="flex items-center space-x-2">
-                    <Select
-                      value={statusFilter}
-                      onValueChange={(value: 'all' | 'active' | 'inactive') => setStatusFilter(value)}
-                    >
-                      <SelectTrigger className="w-[140px] h-9">
-                        <SelectValue placeholder="Status" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Todos</SelectItem>
-                        <SelectItem value="active">Ativos</SelectItem>
-                        <SelectItem value="inactive">Inativos</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  {/* Filtro de Status */}
+              <div className="flex items-center space-x-2">
+                <Select
+                  value={statusFilter}
+                  onValueChange={(value) => setStatusFilter(value as 'all' | 'active' | 'inactive')}
+                >
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos os Status</SelectItem>
+                    <SelectItem value="active">Ativos</SelectItem>
+                    <SelectItem value="inactive">Inativos</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              {/* Filtro de Setor */}
+              <div className="flex items-center space-x-2">
+                <Select
+                  value={setorFilter}
+                  onValueChange={(value) => setSetorFilter(value)}
+                >
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Setor" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos os Setores</SelectItem>
+                    {setores.map((setor) => (
+                      <SelectItem key={setor.id} value={setor.id}>
+                        {setor.name}
+                      </SelectItem>
+                    ))}
+                    <SelectItem value="none">Sem Setor</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
                   
                   {/* Filtro por tipo */}
                   <div className="flex items-center space-x-2">
@@ -423,148 +469,172 @@ function Products() {
             </div>
           </div>
 
-          <div className="overflow-x-auto max-h-[600px]">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nome</TableHead>
-                  <TableHead>Unidade</TableHead>
-                  <TableHead>SKU</TableHead>
-                  <TableHead>Grupo/Subgrupo</TableHead>
-                  <TableHead>Peso da Unidade</TableHead>
-                  <TableHead>Peso do Kg</TableHead>
-                  <TableHead>Custo (Kg)</TableHead>
-                  <TableHead>Preço (Un)</TableHead>
-                  <TableHead>Calendário</TableHead>
-                  <TableHead className="w-16"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading ? (
-                  <TableRow>
-                    <TableCell colSpan={9} className="text-center py-4">
-                      <Loader2 className="h-6 w-6 animate-spin mx-auto" />
-                    </TableCell>
-                  </TableRow>
-                ) : filteredProducts.length > 0 ? (
-                  filteredProducts.map((product) => (
-                    <TableRow key={product.id} className={product.recipe_id ? "bg-amber-50" : ""}>
-                      <TableCell className="font-medium">
-                        {product.name}
-                        {product.recipe_id && (
-                          <Badge variant="outline" className="flex items-center gap-1 border-amber-400 text-amber-700">
-                            <ChefHat size={12} />
-                            Receita
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>{product.unit}</TableCell>
-                      <TableCell>{product.sku || '-'}</TableCell>
-                      <TableCell>
-                        <div className="flex flex-col">
-                          <Badge variant="outline" className="mb-1 w-fit flex items-center gap-1">
-                            <FolderTree size={12} />
-                            {(() => {
-                              const group = groups.find(g => g?.id === product.group_id);
-                              return group?.name ?? '-';
-                            })()}
-                          </Badge>
-                          {product.subgroup_id && (
-                            <Badge variant="outline" className="w-fit flex items-center gap-1 ml-2">
-                              <Tag size={12} />
-                              {(() => {
-                                const subgroup = subgroups.find(sg => sg?.id === product.subgroup_id);
-                                return subgroup?.name ?? '-';
-                              })()}
-                            </Badge>
-                          )}
+          <div className="rounded-md border">
+            <DraggableTable
+              tableId="products-table"
+              isLoading={loading}
+              data={filteredProducts}
+              emptyMessage="Nenhum produto encontrado"
+              columns={[
+                {
+                  id: 'name',
+                  header: 'Nome',
+                  cell: (row) => (
+                    <div className="flex flex-col">
+                      <span className="font-medium">{row.name}</span>
+                      {row.recipe_id && (
+                        <Badge variant="outline" className="flex items-center gap-1 border-amber-400 text-amber-700 w-fit">
+                          <ChefHat size={12} />
+                          Receita
+                        </Badge>
+                      )}
+                    </div>
+                  )
+                },
+                {
+                  id: 'unit',
+                  header: 'Unidade',
+                  accessorFn: (row) => row.unit
+                },
+                {
+                  id: 'sku',
+                  header: 'SKU',
+                  accessorFn: (row) => row.sku || '-'
+                },
+                {
+                  id: 'group',
+                  header: 'Grupo/Subgrupo',
+                  cell: (row) => (
+                    <div className="flex flex-col">
+                      <Badge variant="outline" className="mb-1 w-fit flex items-center gap-1">
+                        <FolderTree size={12} />
+                        {(() => {
+                          const group = groups.find(g => g?.id === row.group_id);
+                          return group?.name ?? '-';
+                        })()}
+                      </Badge>
+                      {row.subgroup_id && (
+                        <Badge variant="outline" className="w-fit flex items-center gap-1 ml-2">
+                          <Tag size={12} />
+                          {(() => {
+                            const subgroup = subgroups.find(sg => sg?.id === row.subgroup_id);
+                            return subgroup?.name ?? '-';
+                          })()}
+                        </Badge>
+                      )}
+                    </div>
+                  )
+                },
+                {
+                  id: 'unit_weight',
+                  header: 'Peso da Unidade',
+                  cell: (row) => (
+                    row.unit_weight !== null && row.unit_weight !== undefined
+                      ? formatDecimal(row.unit_weight, 3)
+                      : '-'
+                  )
+                },
+                {
+                  id: 'kg_weight',
+                  header: 'Peso do Kg',
+                  cell: (row) => (
+                    row.kg_weight !== null && row.kg_weight !== undefined
+                      ? formatDecimal(row.kg_weight, 3)
+                      : '-'
+                  )
+                },
+                {
+                  id: 'cost',
+                  header: 'Custo (Kg)',
+                  cell: (row) => (
+                    row.cost !== null && row.cost !== undefined
+                      ? formatCurrency(row.cost)
+                      : '-'
+                  )
+                },
+                {
+                  id: 'unit_price',
+                  header: 'Preço (Un)',
+                  cell: (row) => (
+                    row.unit_price !== null && row.unit_price !== undefined
+                      ? formatCurrency(row.unit_price)
+                      : '-'
+                  )
+                },
+                {
+                  id: 'calendar',
+                  header: 'Calendário',
+                  cell: (row) => (
+                    <>
+                      {row.all_days ? (
+                        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                          Todos os dias
+                        </Badge>
+                      ) : (
+                        <div className="flex flex-wrap gap-1">
+                          {row.monday && <Badge variant="secondary" translate="no">Seg</Badge>}
+                          {row.tuesday && <Badge variant="secondary" translate="no">Ter</Badge>}
+                          {row.wednesday && <Badge variant="secondary" translate="no">Qua</Badge>}
+                          {row.thursday && <Badge variant="secondary" translate="no">Qui</Badge>}
+                          {row.friday && <Badge variant="secondary" translate="no">Sex</Badge>}
+                          {row.saturday && <Badge variant="secondary" translate="no">Sáb</Badge>}
+                          {row.sunday && <Badge variant="secondary" translate="no">Dom</Badge>}
                         </div>
-                      </TableCell>
-                      <TableCell>
-                        {product.unit_weight !== null && product.unit_weight !== undefined
-                          ? formatDecimal(product.unit_weight, 3)
-                          : '-'}
-                      </TableCell>
-                      <TableCell>
-                        {product.kg_weight !== null && product.kg_weight !== undefined
-                          ? formatDecimal(product.kg_weight, 3)
-                          : '-'}
-                      </TableCell>
-                      <TableCell>
-                        {product.cost !== null && product.cost !== undefined
-                          ? formatCurrency(product.cost)
-                          : '-'}
-                      </TableCell>
-                      <TableCell>
-                        {product.unit_price !== null && product.unit_price !== undefined
-                          ? formatCurrency(product.unit_price)
-                          : '-'}
-                      </TableCell>
-                      <TableCell>
-                        {product.all_days ? (
-                          <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-                            Todos os dias
-                          </Badge>
-                        ) : (
-                          <div className="flex flex-wrap gap-1">
-                            {product.monday && <Badge variant="secondary" translate="no">Seg</Badge>}
-                            {product.tuesday && <Badge variant="secondary" translate="no">Ter</Badge>}
-                            {product.wednesday && <Badge variant="secondary" translate="no">Qua</Badge>}
-                            {product.thursday && <Badge variant="secondary" translate="no">Qui</Badge>}
-                            {product.friday && <Badge variant="secondary" translate="no">Sex</Badge>}
-                            {product.saturday && <Badge variant="secondary" translate="no">Sáb</Badge>}
-                            {product.sunday && <Badge variant="secondary" translate="no">Dom</Badge>}
-                            {!product.monday && !product.tuesday && !product.wednesday &&
-                              !product.thursday && !product.friday && !product.saturday &&
-                              !product.sunday && (
-                                <span className="text-gray-400 text-xs italic">Nenhum</span>
-                              )}
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" className="h-8 w-8 p-0">
-                              <span className="sr-only">Open menu</span>
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuLabel>Ações</DropdownMenuLabel>
-                            <DropdownMenuItem onClick={() => handleEditOpen(product)}>
-                              <Edit className="h-4 w-4 mr-2" />
-                              Editar
-                            </DropdownMenuItem>
-                            {product.recipe_id && (
-                              <DropdownMenuItem onClick={() => navigate(`/recipes/edit/${product.recipe_id}`)}>
-                                <ChefHat className="h-4 w-4 mr-2" />
-                                Ver Receita
-                              </DropdownMenuItem>
-                            )}
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              className="text-red-500"
-                              disabled={!!product.recipe_id}
-                              onClick={() => handleDeleteProduct(product)}
-                            >
-                              <Trash className="h-4 w-4 mr-2" />
-                              Excluir
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={9} className="text-center py-4">
-                      Nenhum produto encontrado.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
+                      )}
+                    </>
+                  )
+                },
+                {
+                  id: 'setor',
+                  header: 'Setor',
+                  cell: (row) => (
+                    <div className="flex items-center gap-2">
+                      {row.setor_id && (
+                        <div 
+                          className="w-3 h-3 rounded-full" 
+                          style={{ backgroundColor: setores.find(s => s.id === row.setor_id)?.color || '#ccc' }}
+                        />
+                      )}
+                      <span>{setores.find(s => s.id === row.setor_id)?.name || '-'}</span>
+                    </div>
+                  )
+                }
+              ]}
+              renderRowActions={(row) => (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" className="h-8 w-8 p-0">
+                      <span className="sr-only">Abrir menu</span>
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuLabel>Ações</DropdownMenuLabel>
+                    <DropdownMenuItem
+                      onClick={() => handleEditOpen(row)}
+                    >
+                      <Edit className="h-4 w-4 mr-2" />
+                      Editar
+                    </DropdownMenuItem>
+                    {row.recipe_id && (
+                      <DropdownMenuItem onClick={() => navigate(`/recipes/edit/${row.recipe_id}`)}>
+                        <ChefHat className="h-4 w-4 mr-2" />
+                        Ver Receita
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      className="text-red-500"
+                      disabled={!!row.recipe_id}
+                      onClick={() => handleDeleteProduct(row)}
+                    >
+                      <Trash className="h-4 w-4 mr-2" />
+                      Excluir
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            />
           </div>
         </Card>
       </div>
@@ -607,7 +677,7 @@ function Products() {
           }
         }}
       >
-        <DialogContent className="sm:max-w-[600px]">
+        <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle>
               Editar Produto
@@ -630,20 +700,18 @@ function Products() {
               onError={(error) => console.error("[ErrorBoundary] Erro capturado no ProductForm:", error)}
             >
               <div className="product-form-container">
-                <ProductForm
-                  key={`edit-${selectedProduct.id}`} // Usa apenas o ID como chave estável
-                  initialData={selectedProduct}
-                  onSubmit={handleEditSubmit}
-                  onCancel={() => {
-                    // Primeiro fechar o diálogo
-                    setEditOpen(false);
-                    // Não limpe selectedProduct aqui, deixe o onOpenChange cuidar disso
-                  }}
-                  isLoading={loading}
-                  groups={groups}
-                  subgroups={subgroups}
-                  isEditMode={true}
-                />
+                <ErrorBoundary fallback={<div>Erro ao carregar formulário</div>}>
+                  <ProductForm
+                    initialData={selectedProduct}
+                    onSubmit={handleEditSubmit}
+                    onCancel={() => setEditOpen(false)}
+                    isLoading={loading}
+                    isEditMode={true}
+                    groups={groups}
+                    subgroups={subgroups}
+                    setores={setores}
+                  />
+                </ErrorBoundary>
               </div>
             </ErrorBoundary>
           )}

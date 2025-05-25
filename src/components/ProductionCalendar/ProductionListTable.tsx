@@ -1,4 +1,4 @@
-import { Loader2, FileEdit, Trash2 } from "lucide-react";
+import { Loader2, FileEdit, Trash2, BarChart } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { 
@@ -28,6 +28,7 @@ interface ProductionListTableProps {
   onGenerateOrder?: (list: ProductionListWithItems) => void;
   onExportPDF?: (list: ProductionListWithItems) => void;
   onExportExcel?: (list: ProductionListWithItems) => void;
+  onViewWorkload?: (list: ProductionListWithItems) => void;
 }
 
 /**
@@ -42,7 +43,8 @@ export default function ProductionListTable({
   onDeleteList,
   onGenerateOrder,
   onExportPDF,
-  onExportExcel
+  onExportExcel,
+  onViewWorkload
 }: ProductionListTableProps) {
   // Função para formatar a data
   const formatDate = (dateString: string) => {
@@ -129,6 +131,7 @@ export default function ProductionListTable({
                   onExportPDF={onExportPDF}
                   onExportExcel={onExportExcel}
                   onGenerateOrder={onGenerateOrder}
+                  onViewWorkload={onViewWorkload}
                 />
               </TableCell>
             </TableRow>

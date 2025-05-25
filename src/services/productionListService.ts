@@ -40,6 +40,7 @@ export interface ProductItemDetails {
   product_type?: string;
   group_id?: string;
   subgroup_id?: string;
+  setor_id?: string;
 }
 
 export interface ProductionListItemWithDetails extends ProductionListItem {
@@ -348,12 +349,14 @@ export async function getProductionListItems(listId: string, companyId: string):
 export async function getProductionListItemsWithDetails(listId: string, companyId: string): Promise<ProductionListItemWithDetails[]> {
   try {
     if (!companyId || typeof companyId !== "string") return [];
+    
     // 1. Buscar todos os itens da lista
     const { data: items, error: itemsError } = await supabase
       .from('production_list_items')
       .select('*')
       .eq('list_id', listId)
       .eq('company_id', companyId);
+    
     if (itemsError) throw itemsError;
     if (!items || items.length === 0) return [];
 
@@ -361,9 +364,10 @@ export async function getProductionListItemsWithDetails(listId: string, companyI
     const productIds = items.map((item: any) => item.product_id);
     const { data: products, error: productsError } = await supabase
       .from('products')
-      .select('*')
+      .select('id, name, unit, product_type, group_id, subgroup_id, setor_id')
       .in('id', productIds)
       .eq('company_id', companyId);
+    
     if (productsError) throw productsError;
 
     // 3. Buscar todas as receitas necessárias em lote

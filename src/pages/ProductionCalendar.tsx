@@ -47,6 +47,7 @@ import {
 import useProductionLists from "@/hooks/useProductionLists";
 import ProductionListTable from "@/components/ProductionCalendar/ProductionListTable";
 import ProductionListForm from "@/components/ProductionCalendar/ProductionListForm";
+import SetorWorkloadView from "@/components/ProductionCalendar/SetorWorkloadView";
 
 // Interface para representar as listas de produção com seus itens
 interface ProductionListWithItems extends ProductionList {
@@ -115,6 +116,12 @@ const ProductionCalendar = () => {
   const [editingListItems, setEditingListItems] = useState<ProductionListItem[]>([]);
   const [isLoadingItems, setIsLoadingItems] = useState<boolean>(false);
   const [isSavingList, setIsSavingList] = useState<boolean>(false);
+  
+  // Estado para visualização de carga de trabalho por setor
+  const [selectedList, setSelectedList] = useState<ProductionListWithItems | null>(null);
+  const [selectedListItems, setSelectedListItems] = useState<ProductionListItemWithDetails[]>([]);
+  const [loadingSelectedListItems, setLoadingSelectedListItems] = useState<boolean>(false);
+  const [showWorkloadView, setShowWorkloadView] = useState<boolean>(false);
   
   // Handler do botão de atualizar listas diárias
   const handleUpdateDailyLists = async () => {
@@ -249,6 +256,37 @@ const ProductionCalendar = () => {
       console.error("Erro ao excluir lista:", error);
       toast.error("Ocorreu um erro ao excluir a lista");
     }
+  };
+  
+  // Função para visualizar carga de trabalho por setor
+  const handleViewWorkload = async (list: ProductionListWithItems) => {
+    if (!companyId) {
+      toast.error("Nenhuma empresa selecionada para visualizar a carga de trabalho.");
+      return;
+    }
+    
+    setSelectedList(list);
+    setLoadingSelectedListItems(true);
+    setShowWorkloadView(true);
+    
+    try {
+      // Buscar itens com detalhes (incluindo setor_id)
+      const items = await getProductionListItemsWithDetails(list.id, companyId);
+      setSelectedListItems(items);
+    } catch (error) {
+      console.error("Erro ao carregar itens da lista:", error);
+      toast.error("Não foi possível carregar os itens da lista");
+      setShowWorkloadView(false);
+    } finally {
+      setLoadingSelectedListItems(false);
+    }
+  };
+  
+  // Função para fechar a visualização de carga de trabalho
+  const handleCloseWorkloadView = () => {
+    setShowWorkloadView(false);
+    setSelectedList(null);
+    setSelectedListItems([]);
   };
   
   // Função para gerar pedido de produção a partir de uma lista
@@ -449,33 +487,56 @@ return (
       </div>
 
       {/* Separação visual das listas diárias e personalizadas */}
-      <div className="space-y-4">
-        <h2 className="font-semibold">Listas Diárias</h2>
-        <ProductionListTable
-          lists={lists.filter(l => l.type === 'daily').sort((a, b) => {
-            const order = ['Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado','Domingo'];
-            const getDayIndex = (name: string) => order.findIndex(d => name.includes(d));
-            return getDayIndex(a.name) - getDayIndex(b.name);
-          })}
-          isLoading={listsLoading || isUpdatingDaily}
-          error={listsError}
-          onExportPDF={handleExportPDF}
-          onExportExcel={handleExportExcel}
-          onGenerateOrder={handleGenerateOrder}
-        />
+      {/* Visualização de carga de trabalho por setor */}
+      {showWorkloadView && selectedList && (
+        <div className="mb-4">
+          <div className="flex justify-between items-center mb-2">
+            <h2 className="font-semibold">Carga de Trabalho por Setor</h2>
+            <Button variant="ghost" size="sm" onClick={handleCloseWorkloadView}>
+              Voltar para Calendário
+            </Button>
+          </div>
+          <SetorWorkloadView 
+            items={selectedListItems} 
+            companyId={companyId || ''}
+            date={new Date(selectedList.created_at)}
+            isLoading={loadingSelectedListItems}
+          />
+        </div>
+      )}
+      
+      {/* Listas de produção (ocultas quando a visualização de carga de trabalho está ativa) */}
+      {!showWorkloadView && (
+        <div className="space-y-4">
+          <h2 className="font-semibold">Listas Diárias</h2>
+          <ProductionListTable
+            lists={lists.filter(l => l.type === 'daily').sort((a, b) => {
+              const order = ['Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado','Domingo'];
+              const getDayIndex = (name: string) => order.findIndex(d => name.includes(d));
+              return getDayIndex(a.name) - getDayIndex(b.name);
+            })}
+            isLoading={listsLoading || isUpdatingDaily}
+            error={listsError}
+            onExportPDF={handleExportPDF}
+            onExportExcel={handleExportExcel}
+            onGenerateOrder={handleGenerateOrder}
+            onViewWorkload={handleViewWorkload}
+          />
 
-        <h2 className="font-semibold">Listas Personalizadas</h2>
-        <ProductionListTable
-          lists={lists.filter(l => l.type === 'custom')}
-          isLoading={listsLoading}
-          error={listsError}
-          onEditList={handleEditList}
-          onDeleteList={handleDeleteList}
-          onExportPDF={handleExportPDF}
-          onExportExcel={handleExportExcel}
-          onGenerateOrder={handleGenerateOrder}
-        />
-      </div>
+          <h2 className="font-semibold">Listas Personalizadas</h2>
+          <ProductionListTable
+            lists={lists.filter(l => l.type === 'custom')}
+            isLoading={listsLoading}
+            error={listsError}
+            onEditList={handleEditList}
+            onDeleteList={handleDeleteList}
+            onExportPDF={handleExportPDF}
+            onExportExcel={handleExportExcel}
+            onGenerateOrder={handleGenerateOrder}
+            onViewWorkload={handleViewWorkload}
+          />
+        </div>
+      )}
 
       {/* Modal de formulário para criar/editar lista personalizada */}
       <Dialog open={isFormModalOpen} onOpenChange={setIsFormModalOpen}>

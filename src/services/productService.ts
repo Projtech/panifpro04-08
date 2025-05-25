@@ -60,6 +60,7 @@ export interface Product {
   kg_weight?: number | null; // Peso total (kg) da receita (registrado se unit='KG')
   group_id?: string | null; // UUID do grupo
   subgroup_id?: string | null; // UUID do subgrupo
+  setor_id?: string | null; // UUID do setor (OPCIONAL)
   product_type?: ProductType; // *** Usa o tipo corrigido *** (tornando opcional)
   code?: string | null; // Código interno do produto (pode vir da receita)
   all_days?: boolean | null; // Dias não são transferidos da receita

@@ -1,4 +1,4 @@
-import { Play, FileText, Download, Pencil, Trash, FileSpreadsheet } from "lucide-react";
+import { Play, FileText, Download, Pencil, Trash, FileSpreadsheet, BarChart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -31,6 +31,7 @@ interface ProductionListActionsProps {
   onExportProductionControl?: (list: ProductionListWithItems) => void;
   onEdit?: (list: ProductionListWithItems) => void;
   onDelete?: (list: ProductionListWithItems) => void;
+  onViewWorkload?: (list: ProductionListWithItems) => void;
 }
 
 export default function ProductionListActions({
@@ -41,6 +42,7 @@ export default function ProductionListActions({
   onExportProductionControl,
   onEdit,
   onDelete,
+  onViewWorkload,
 }: ProductionListActionsProps) {
   // Verificar se a lista tem itens
   const hasItems = list.items && list.items.length > 0;
@@ -50,16 +52,29 @@ export default function ProductionListActions({
 
   return (
     <div className="flex items-center space-x-1 justify-end">
+      {/* Botão para visualizar carga de trabalho por setor */}
+      {onViewWorkload && (
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => onViewWorkload(list)}
+          title="Visualizar Carga de Trabalho por Setor"
+        >
+          <BarChart className="h-4 w-4" />
+        </Button>
+      )}
+      
       {/* Botão para gerar pedido de produção */}
-      <Button
-        variant="ghost"
-        size="icon"
-        disabled={false}
-        onClick={() => onGenerateOrder?.(list)}
-        title="Gerar Pedido de Produção"
-      >
-        <Play className="h-4 w-4 text-green-600" />
-      </Button>
+      {onGenerateOrder && (
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => onGenerateOrder(list)}
+          title="Gerar Pedido de Produção"
+        >
+          <Play className="h-4 w-4 text-green-600" />
+        </Button>
+      )}
 
       {/* Botão para exportar PDF */}
       <Button

@@ -13,7 +13,9 @@ import {
   Home,
   Calendar,
   FolderTree,
-  Users
+  Users,
+  PackageCheck,
+  Layers
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -29,12 +31,17 @@ const menuItems = [
     path: "/products",
   },
   {
+    title: "Produtos por Setor",
+    icon: Layers,
+    path: "/products-by-setor",
+  },
+  {
     title: "Estoque",
     icon: ShoppingCart,
     path: "/inventory",
   },
   {
-    title: "Grupos e Subgrupos",
+    title: "Grupos, Subgrupos e Setores",
     icon: FolderTree,
     path: "/groups",
   },

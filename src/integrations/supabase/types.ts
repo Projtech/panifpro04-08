@@ -580,6 +580,44 @@ export type Database = {
           },
         ]
       }
+      setores: {
+        Row: {
+          id: string
+          name: string
+          description: string | null
+          color: string | null
+          company_id: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          description?: string | null
+          color?: string | null
+          company_id: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          description?: string | null
+          color?: string | null
+          company_id?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "setores_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       subgroups: {
         Row: {
           created_at: string | null

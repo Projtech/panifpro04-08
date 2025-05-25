@@ -5,6 +5,8 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { HelmetProvider } from 'react-helmet-async';
+import { TableConfigProvider } from './contexts/TableConfigContext';
 
 // Auth Components
 import { AuthProvider } from "./contexts/AuthContext";
@@ -30,6 +32,7 @@ import ProductionOrders from "./pages/ProductionOrders";
 import ProductionOrderForm from "./pages/ProductionOrderForm";
 import ProductionConfirmation from "./pages/ProductionConfirmation";
 import GroupsManagement from "./pages/GroupsManagement";
+import ProductsBySetorPage from "./pages/ProductsBySetorPage";
 import NotFound from "./pages/NotFound";
 import NovoProduto from "./pages/NovoProduto";
 
@@ -73,9 +76,11 @@ const App = () => {
       <TooltipProvider>
         <Toaster />
         <Sonner />
-        <AuthProvider>
-          <BrowserRouter>
-            <AuthErrorHandler />
+        <HelmetProvider>
+          <AuthProvider>
+            <TableConfigProvider>
+              <BrowserRouter>
+              <AuthErrorHandler />
             <Routes>
               {/* Rotas públicas */}
               <Route path="/login" element={<Login />} />
@@ -108,6 +113,14 @@ const App = () => {
                 <ProtectedRoute>
                   <AppLayout>
                     <Products />
+                  </AppLayout>
+                </ProtectedRoute>
+              } />
+              
+              <Route path="/products-by-setor" element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <ProductsBySetorPage />
                   </AppLayout>
                 </ProtectedRoute>
               } />
@@ -252,8 +265,10 @@ const App = () => {
               
               <Route path="*" element={<NotFound />} />
             </Routes>
-          </BrowserRouter>
-        </AuthProvider>
+              </BrowserRouter>
+            </TableConfigProvider>
+          </AuthProvider>
+        </HelmetProvider>
       </TooltipProvider>
     </QueryClientProvider>
   );
