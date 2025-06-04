@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { startScheduledPdfChecker, stopScheduledPdfChecker } from './services/scheduledPdfService';
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -39,19 +39,19 @@ import NovoProduto from "./pages/NovoProduto";
 const queryClient = new QueryClient();
 
 const App = () => {
-  // Estado para armazenar o ID do intervalo de verificação de programações de PDF
-  const [scheduledPdfCheckerId, setScheduledPdfCheckerId] = useState<number | null>(null);
+  // Ref para armazenar o ID do intervalo de verificação de programações de PDF
+  const scheduledPdfCheckerRef = useRef<number | null>(null);
   
   // Iniciar o verificador de programações de PDF quando o componente for montado
   useEffect(() => {
     // Iniciar o verificador e armazenar o ID do intervalo
     const intervalId = startScheduledPdfChecker();
-    setScheduledPdfCheckerId(intervalId);
+    scheduledPdfCheckerRef.current = intervalId;
     
     // Limpar o intervalo quando o componente for desmontado
     return () => {
-      if (scheduledPdfCheckerId) {
-        stopScheduledPdfChecker(scheduledPdfCheckerId);
+      if (scheduledPdfCheckerRef.current) {
+        stopScheduledPdfChecker(scheduledPdfCheckerRef.current);
       }
     };
   }, []);
