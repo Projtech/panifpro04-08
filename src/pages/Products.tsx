@@ -183,28 +183,30 @@ function Products() {
   };
 
   useEffect(() => {
-    fetchProducts();
-    fetchGroups();
-    fetchSubgroups();
-    fetchSetores();
+    if (!authLoading && activeCompany?.id) {
+      fetchProducts();
+      fetchGroups();
+      fetchSubgroups();
+      fetchSetores();
 
-    // Configurar intervalo de atualização automática
-    refreshTimerRef.current = setInterval(() => {
-      console.log("Atualizando produtos automaticamente...");
-      // Não atualizar se o diálogo de edição estiver aberto para evitar conflitos
-      if (!editOpen) {
-        fetchProducts();
-      } else {
-        console.log("Atualizacao automática pulada - diálogo de edição aberto");
-      }
-    }, 5 * 60 * 1000);
+      // Configurar intervalo de atualização automática
+      refreshTimerRef.current = setInterval(() => {
+        console.log("Atualizando produtos automaticamente...");
+        // Não atualizar se o diálogo de edição estiver aberto para evitar conflitos
+        if (!editOpen) {
+          fetchProducts();
+        } else {
+          console.log("Atualizacao automática pulada - diálogo de edição aberto");
+        }
+      }, 5 * 60 * 1000);
+    }
 
     return () => {
       if (refreshTimerRef.current) {
         clearInterval(refreshTimerRef.current);
       }
     };
-  }, [editOpen]); // Adicionar editOpen como dependência
+  }, [editOpen, activeCompany?.id, authLoading]);
 
   useEffect(() => {
     if (selectedProduct) {

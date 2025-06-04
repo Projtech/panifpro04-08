@@ -119,7 +119,7 @@ export function useDashboardData() {
     };
     
     fetchDashboardData();
-  }, []);
+  }, [activeCompany?.id, authLoading]);
 
   return { loading, dashboardStats, recentActivity };
 }
