@@ -52,25 +52,23 @@ export default function useProductionOrder({ id, calendarItems, calendarDate }: 
   useEffect(() => {
     const loadRecipes = async () => {
       if (authLoading || !activeCompany?.id) {
-        console.error("Empresa ativa não carregada");
-        toast.error("Empresa ativa não carregada");
-        setLoading(false);
-        return;
+        return; // Aguarda empresa ativa carregar
       }
+
       setLoading(true);
       const recipesData = await getRecipes(activeCompany.id);
       setRecipes(recipesData);
-      
+
       // If we have an ID, load the production order
       if (id) {
         await loadProductionOrder(id);
       }
-      
+
       setLoading(false);
     };
-    
+
     loadRecipes();
-  }, [id]);
+  }, [id, activeCompany?.id, authLoading]);
   
   useEffect(() => {
     // Detect if navigation came from calendar
