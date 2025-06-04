@@ -364,7 +364,7 @@ export async function getProductionListItemsWithDetails(listId: string, companyI
     const productIds = items.map((item: any) => item.product_id);
     const { data: products, error: productsError } = await supabase
       .from('products')
-      .select('id, name, unit, product_type, group_id, subgroup_id, setor_id')
+      .select('id, name, unit, recipe_id')
       .in('id', productIds)
       .eq('company_id', companyId);
     

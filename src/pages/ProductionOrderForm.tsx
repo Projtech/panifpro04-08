@@ -6,6 +6,21 @@ import useProductionOrder, { Recipe } from "@/hooks/useProductionOrder";
 import { getRecipeWithIngredients } from "@/services/recipeService";
 import { useAuth } from '@/contexts/AuthContext';
 
+// Interface para os itens retornados pela Edge Function de pré-pesagem
+interface PreWeighingItem {
+  recipe_id: string;
+  recipe_name: string;
+  product_id: string;
+  product_name: string;
+  total_quantity: number;
+  unit: string;
+  batch_multiplier: number;
+  parent_recipe_name: string;
+  is_sub_recipe: boolean;
+  pattern_count: number;
+  product_unit?: string; // Para compatibilidade com o código existente
+}
+
 // Components
 import OrderHeader from "@/components/ProductionOrder/OrderHeader";
 import OrderInfoForm from "@/components/ProductionOrder/OrderInfoForm";
@@ -82,7 +97,9 @@ export default function ProductionOrderForm({ showMaterialsList: initialShowMate
           };
         }
       });
+      console.log("Mapped orderRecipes:", mapped);
       setOrderRecipes(mapped);
+      console.log("setOrderRecipes called with:", mapped);
       
       // Definir um número para o pedido baseado na origem dos dados
       if (state.fromPreList && setOrderNumber) {
@@ -121,6 +138,13 @@ export default function ProductionOrderForm({ showMaterialsList: initialShowMate
     calendarDate: state?.calendarDate
   });
   
+  console.log("ProductionOrderForm - Current orderRecipes state:", orderRecipes);
+  console.log("ProductionOrderForm - orderRecipes length:", orderRecipes?.length);
+  
+  if (orderRecipes && orderRecipes.length > 0) {
+    console.log("ProductionOrderForm - First orderRecipe detailed:", JSON.stringify(orderRecipes[0], null, 2));
+  }
+
   // Se initialShowMaterialsList for true, definimos showMaterialsList como true
   useEffect(() => {
     if (initialShowMaterialsList && id) {
@@ -133,7 +157,18 @@ export default function ProductionOrderForm({ showMaterialsList: initialShowMate
   const [loadingPreWeighing, setLoadingPreWeighing] = useState(false);
 
   const calculatePreWeighing = useCallback(async () => {
-    if (!orderRecipes || orderRecipes.length === 0) return;
+    console.log('calculatePreWeighing called with orderRecipes:', orderRecipes);
+    console.log('orderRecipes length:', orderRecipes?.length);
+    
+    if (!orderRecipes || orderRecipes.length === 0) {
+      console.log('No orderRecipes found, returning early');
+      toast({
+        variant: "destructive",
+        title: "Erro",
+        description: "Sem receitas"
+      });
+      return;
+    }
     if (!activeCompany?.id) {
       toast({
         variant: "destructive",
@@ -145,110 +180,81 @@ export default function ProductionOrderForm({ showMaterialsList: initialShowMate
     
     setLoadingPreWeighing(true);
     try {
-      // Aqui vamos implementar a lógica de cálculo das sub-receitas e matérias-primas
+      console.log('calculatePreWeighing - Starting processing');
+      console.log('activeCompany.id:', activeCompany?.id);
+      
+      // Converter orderRecipes para o formato esperado pela Edge Function
+      const orderRecipesFormatted = orderRecipes.map(orderRecipe => {
+        // Usar convertedQuantity quando quantity for 0 ou não estiver definido
+        const effectiveQuantity = orderRecipe.quantity > 0 ? orderRecipe.quantity : orderRecipe.convertedQuantity;
+        
+        console.log(`Receita ${orderRecipe.recipeName}: usando quantidade ${effectiveQuantity} (original: ${orderRecipe.quantity}, convertida: ${orderRecipe.convertedQuantity})`);
+        
+        return {
+          recipeId: orderRecipe.recipeId,
+          recipeName: orderRecipe.recipeName,
+          quantity: effectiveQuantity, // Usar a quantidade efetiva
+          unit: orderRecipe.unit
+        };
+      });
+
+      console.log('Calling calculatePreWeighingList with formatted data:', orderRecipesFormatted);
+      
+      // Chamar a Edge Function via serviço
+      // Importar a função do serviço
+      const { calculatePreWeighingList } = await import('@/services/productionOrderService');
+      const preWeighingItems = await calculatePreWeighingList(activeCompany.id, orderRecipesFormatted);
+      
+      console.log('calculatePreWeighingList returned:', preWeighingItems);
+      
+      // Processar os dados retornados pela Edge Function
       const subRecipes = [];
       const rawMaterials = [];
       
-      // Processando cada receita do pedido
-      for (const orderRecipe of orderRecipes) {
-        if (!orderRecipe.recipeId) continue;
-
-        const { recipe: detailedRecipeData, ingredients: recipeComponents } = 
-          await getRecipeWithIngredients(orderRecipe.recipeId, activeCompany.id);
-
-        if (!detailedRecipeData) {
-          console.warn(`Detalhes não encontrados para a receita ${orderRecipe.recipeName} (ID: ${orderRecipe.recipeId})`);
-          continue;
-        }
-
-        // CALCULAR O NÚMERO DE BATCHES DA RECEITA PAI (MULTIPLICADOR PARA OS COMPONENTES)
-        let parentRecipeBatchMultiplier = 0;
-        if (orderRecipe.unit === 'un' && detailedRecipeData.yield_units && detailedRecipeData.yield_units > 0) {
-          parentRecipeBatchMultiplier = (orderRecipe.quantity || 0) / detailedRecipeData.yield_units;
-        } else if (orderRecipe.unit === 'kg' && detailedRecipeData.yield_kg && detailedRecipeData.yield_kg > 0) {
-          parentRecipeBatchMultiplier = (orderRecipe.quantity || 0) / detailedRecipeData.yield_kg;
-        } else {
-          // Se não for possível calcular por batch (ex: pedido em KG mas receita só tem rendimento em UN, ou vice-versa, ou sem rendimento)
-          // Neste caso, precisamos decidir a estratégia. Por ora, vamos logar um aviso e usar 1 para não quebrar,
-          // mas isso implica que a quantidade do componente é para a quantidade total do pedido.
-          // O ideal é que os cadastros permitam sempre o cálculo de batch.
-          parentRecipeBatchMultiplier = (orderRecipe.quantity || 0); // Ou 1 se os componentes já são para a quantidade total?
-          console.warn(`Não foi possível determinar o multiplicador de batch adequado para ${detailedRecipeData.name} (pedido: ${orderRecipe.quantity} ${orderRecipe.unit}, rendimento receita: ${detailedRecipeData.yield_kg} kg / ${detailedRecipeData.yield_units} un). Multiplicador usado: ${parentRecipeBatchMultiplier}. Verifique o cadastro da receita e a lógica de fallback.`);
-        }
+      // Processar os itens retornados
+      for (const item of preWeighingItems) {
+        // Adicionar à lista de matérias-primas ou sub-receitas
+        rawMaterials.push({
+          id: item.product_id,
+          name: item.product_name,
+          parentRecipe: item.parent_recipe_name || "Receita Principal",
+          totalAmount: item.total_quantity,
+          unit: item.unit,
+          is_sub_recipe: item.is_sub_recipe || false,
+          pattern_count: item.pattern_count || 0
+        });
         
-        if (parentRecipeBatchMultiplier === 0 && (orderRecipe.quantity || 0) > 0) {
-            console.warn(`Multiplicador de batch resultou em 0 para ${detailedRecipeData.name} com quantidade de pedido > 0. Isso pode levar a cálculos zerados. Quantidade Pedido: ${orderRecipe.quantity}, Unidade Pedido: ${orderRecipe.unit}, Rendimento Receita KG: ${detailedRecipeData.yield_kg}, Rendimento Receita UN: ${detailedRecipeData.yield_units}`);
-            // Decide se quer usar 1 como fallback para evitar que tudo seja zero, ou manter 0 se isso for um erro que precisa ser evidente.
-            // Se os componentes são para 1 batch, e o batch multiplier é 0, então neededAmount será 0.
-            // Se orderRecipe.quantity é > 0, isso indica um problema no cálculo do multiplicador ou nos dados de rendimento.
-        }
-
-        // Transformar recipeComponents para o formato esperado
-        const currentRecipeSubRecipes = [];
-        const currentRecipeRawIngredients = [];
-
-        for (const component of recipeComponents) {
-          if (component.is_sub_recipe && component.sub_recipe) {
-            currentRecipeSubRecipes.push({
-              id: component.sub_recipe_id || component.sub_recipe.id, // ID da sub-receita em si
-              name: component.sub_recipe.name,
-              // 'yield' é o rendimento DA SUB-RECEITA (quanto 1 unidade/batch dela produz)
-              // Usaremos yield_kg por padrão, mas isso pode precisar de ajuste se a unidade da sub-receita for 'un'
-              yield: component.sub_recipe.yield_kg, 
-              amount: component.quantity, // Quantidade DESTA sub-receita USADA na receita PAI
-              unit: component.unit
-            });
-          } else if (!component.is_sub_recipe && component.product) {
-            currentRecipeRawIngredients.push({
-              id: component.product_id || component.product.id, // ID do produto (matéria-prima)
-              name: component.product.name,
-              amount: component.quantity, // Quantidade DESTA matéria-prima USADA na receita PAI
-              unit: component.unit,
-              type: 'raw'
-            });
-          }
-        }
-
-
-        // Processando sub-receitas da receita atual do pedido
-        if (currentRecipeSubRecipes.length > 0) {
-          for (const subRecipe of currentRecipeSubRecipes) {
-            const neededAmount = subRecipe.amount * parentRecipeBatchMultiplier;
-            subRecipes.push({
-              id: `${detailedRecipeData.id}-${subRecipe.id}`,
-              name: subRecipe.name,
-              standardYield: subRecipe.yield,
-              neededAmount,
-              recipeCount: neededAmount / subRecipe.yield,
-              unit: subRecipe.unit
-            });
-          }
-        }
-
-        // Processando matérias-primas diretas da receita atual do pedido
-        if (currentRecipeRawIngredients.length > 0) {
-          for (const ingredient of currentRecipeRawIngredients) {
-            if (ingredient.type === 'raw') {
-              const amount = ingredient.amount * parentRecipeBatchMultiplier;
-              const existingMaterial = rawMaterials.find(m => m.id === ingredient.id);
-              
-              if (existingMaterial) {
-                existingMaterial.totalAmount += amount;
-              } else {
-                rawMaterials.push({
-                  id: ingredient.id,
-                  name: ingredient.name,
-                  totalAmount: amount,
-                  unit: ingredient.unit
-                });
-              }
-            }
-          }
+        // Se for uma sub-receita, também adicionar à lista de sub-receitas para compatibilidade
+        if (item.is_sub_recipe) {
+          subRecipes.push({
+            id: item.recipe_id,
+            name: item.product_name,
+            standardYield: 1, // Valor padrão
+            neededAmount: item.total_quantity,
+            recipeCount: item.pattern_count || 1,
+            unit: item.unit
+          });
         }
       }
 
+      // Ordenar por receita pai, depois sub-receitas primeiro, depois por nome
+      rawMaterials.sort((a, b) => {
+        // Primeiro ordenar por receita pai
+        const parentCompare = (a.parentRecipe || '').localeCompare(b.parentRecipe || '');
+        if (parentCompare !== 0) return parentCompare;
+        
+        // Depois, sub-receitas primeiro
+        if (a.is_sub_recipe && !b.is_sub_recipe) return -1;
+        if (!a.is_sub_recipe && b.is_sub_recipe) return 1;
+        
+        // Por fim, ordenar por nome
+        return a.name.localeCompare(b.name);
+      });
+
       setPreWeighingData({ subRecipes, rawMaterials });
       setShowPreWeighingList(true);
+      
+      console.log('Pre-weighing data calculated successfully:', { subRecipes, rawMaterials });
     } catch (error) {
       console.error('Error calculating pre-weighing:', error);
       toast({
@@ -258,7 +264,7 @@ export default function ProductionOrderForm({ showMaterialsList: initialShowMate
     } finally {
       setLoadingPreWeighing(false);
     }
-  }, [orderRecipes, recipes]);
+  }, [orderRecipes, activeCompany?.id]);
   
   // Efeito para abrir automaticamente as listas quando solicitado via props
   // Usando uma ref para controlar se já executamos este efeito

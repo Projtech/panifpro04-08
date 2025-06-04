@@ -30,6 +30,9 @@ export interface PreWeighingRawMaterial {
   name: string;
   totalAmount: number;
   unit: string;
+  parentRecipe?: string; // Nome da receita pai
+  is_sub_recipe?: boolean; // Indica se é uma sub-receita
+  pattern_count?: number; // Número de padrões para sub-receitas
 }
 
 interface PreWeighingCalculatorProps {
@@ -219,23 +222,41 @@ export default function PreWeighingCalculator({
               {/* Seção de Matérias-primas */}
               {rawMaterials.length > 0 && (
                 <div>
-                  <h3 className="text-lg font-medium text-bakery-brown mb-4">Matérias-primas</h3>
-                  <div className="max-h-[200px] overflow-y-auto pr-2">
+                  <h3 className="text-lg font-medium text-bakery-brown mb-4">Lista de Pré-Pesagem</h3>
+                  <div className="max-h-[300px] overflow-y-auto pr-2">
                     <Table>
                       <TableHeader className="sticky top-0 bg-white z-10">
                         <TableRow>
-                          <TableHead>Ingrediente</TableHead>
-                          <TableHead className="text-right">Quantidade Total</TableHead>
+                          <TableHead>Receita</TableHead>
+                          <TableHead className="text-right">Quantidade</TableHead>
                           <TableHead>Unidade</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {rawMaterials.map((material) => (
-                          <TableRow key={material.id}>
-                            <TableCell className="font-medium">{material.name}</TableCell>
-                            <TableCell className="text-right">{material.totalAmount.toFixed(2)}</TableCell>
-                            <TableCell>{material.unit}</TableCell>
-                          </TableRow>
+                        {/* Agrupar por receita pai */}
+                        {rawMaterials
+                          .sort((a, b) => {
+                            // Primeiro ordenar por receita pai
+                            const parentCompare = (a.parentRecipe || '').localeCompare(b.parentRecipe || '');
+                            if (parentCompare !== 0) return parentCompare;
+                            
+                            // Depois, sub-receitas primeiro
+                            if (a.is_sub_recipe && !b.is_sub_recipe) return -1;
+                            if (!a.is_sub_recipe && b.is_sub_recipe) return 1;
+                            
+                            // Por fim, ordenar por nome
+                            return a.name.localeCompare(b.name);
+                          })
+                          .map((material) => (
+                            <TableRow key={material.id}>
+                              <TableCell className="font-medium">{material.name}</TableCell>
+                              <TableCell className="text-right">
+                                {material.is_sub_recipe && material.pattern_count 
+                                  ? `${material.pattern_count} padrões` 
+                                  : material.totalAmount.toFixed(2)}
+                              </TableCell>
+                              <TableCell>{material.is_sub_recipe ? '' : material.unit}</TableCell>
+                            </TableRow>
                         ))}
                       </TableBody>
                     </Table>

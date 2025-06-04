@@ -1,4 +1,3 @@
-
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { AlertTriangle, ArrowLeft, CheckCircle, List, Loader2, Save } from "lucide-react";
@@ -30,6 +29,9 @@ export default function StatusManager({
   onStatusUpdate,
   navigateToConfirmation
 }: StatusManagerProps) {
+  console.log('StatusManager - orderRecipes:', orderRecipes);
+  console.log('StatusManager - orderRecipes.length:', orderRecipes?.length);
+
   return (
     <Card>
       <div className="p-6">

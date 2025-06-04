@@ -1,6 +1,5 @@
-
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { supabase } from '@/integrations/supabase/client';
 
 export type OrderStatus = 'pending' | 'in_progress' | 'completed';
 
@@ -324,5 +323,120 @@ export async function deleteProductionOrder(id: string, companyId: string): Prom
     console.error("Error deleting production order:", error);
     toast.error("Erro ao excluir pedido de produção");
     return false;
+  }
+}
+
+// Interfaces para os resultados das funções do Supabase
+export interface OrderRecipe {
+  recipeId: string;
+  recipeName: string;
+  quantity: number;
+  unit: string;
+  total_quantity: number;
+  unit_cost: number;
+  total_cost: number;
+  supplier?: string;
+  current_stock?: number;
+  min_stock?: number;
+}
+
+export interface PreWeighingItem {
+  recipe_id: string;
+  recipe_name: string;
+  product_id: string;
+  product_name: string;
+  product_unit: string;
+  total_quantity: number;
+  unit_cost?: number;
+  total_cost?: number;
+  supplier?: string;
+  current_stock?: number;
+  min_stock?: number;
+  unit: string;
+  batch_multiplier: number;
+  parent_recipe_name: string;
+  is_sub_recipe: boolean;
+  pattern_count: number;
+}
+
+export interface MaterialItem {
+  product_id: string;
+  product_name: string;
+  product_unit: string;
+  total_quantity: number;
+  unit_cost?: number;
+  total_cost?: number;
+  supplier?: string;
+  current_stock?: number;
+  min_stock?: number;
+}
+
+/**
+ * Calcula a lista de materiais usando Edge Function
+ */
+export async function calculateMaterialsList(
+  companyId: string,
+  orderRecipes: OrderRecipe[]
+): Promise<MaterialItem[]> {
+  try {
+    console.log('calculateMaterialsList - Calling Edge Function with:', {
+      companyId,
+      orderRecipes
+    });
+
+    // Call the Edge Function instead of RPC
+    const { data, error } = await supabase.functions.invoke('calculate-materials', {
+      body: {
+        companyId,
+        orderRecipes
+      }
+    });
+
+    if (error) {
+      console.error('Error calling calculate-materials Edge Function:', error);
+      throw error;
+    }
+
+    console.log('calculateMaterialsList - Edge Function returned:', data);
+    return data || [];
+  } catch (error) {
+    console.error("Error calculating materials list:", error);
+    toast.error("Erro ao calcular lista de materiais");
+    return [];
+  }
+}
+
+/**
+ * Calcula a lista de pré-pesagem usando Edge Function
+ */
+export async function calculatePreWeighingList(
+  companyId: string,
+  orderRecipes: OrderRecipe[]
+): Promise<PreWeighingItem[]> {
+  try {
+    console.log('calculatePreWeighingList - Calling Edge Function with:', {
+      companyId,
+      orderRecipes
+    });
+
+    // Call the Edge Function instead of RPC
+    const { data, error } = await supabase.functions.invoke('calculate-preweighing', {
+      body: {
+        companyId,
+        orderRecipes
+      }
+    });
+
+    if (error) {
+      console.error('Error calling calculate-preweighing Edge Function:', error);
+      throw error;
+    }
+
+    console.log('calculatePreWeighingList - Edge Function returned:', data);
+    return data || [];
+  } catch (error) {
+    console.error("Error calculating pre-weighing list:", error);
+    toast.error("Erro ao calcular lista de pré-pesagem");
+    return [];
   }
 }

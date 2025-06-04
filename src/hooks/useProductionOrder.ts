@@ -1,68 +1,38 @@
-import { useState, useEffect } from "react";
-import { useToast } from "@/hooks/use-toast";
+import { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 import { useNavigate } from "react-router-dom";
-import { OrderRecipe } from "@/components/ProductionOrder/RecipeManager";
 import { 
+  getProductionOrders, 
   createProductionOrder, 
-  updateProductionOrderStatus, 
-  getProductionOrder, 
-  // updateProductionOrder, // REMOVER - Não existe no serviço
+  updateProductionOrderStatus,
+  getProductionOrder,
   ProductionOrderItem 
 } from "@/services/productionOrderService";
-import { getAllRecipeIngredients, getRecipes } from "@/services/recipeService";
+import { getAllRecipeIngredients, getRecipes, getRecipeWithIngredients, Recipe as ServiceRecipe } from "@/services/recipeService";
 import { useAuth } from '@/contexts/AuthContext';
-import { MaterialItem } from "@/components/ProductionOrder/MaterialsCalculator";
+import { calculateMaterialsList, calculatePreWeighingList, type OrderRecipe as ServiceOrderRecipe, type MaterialItem as ServiceMaterialItem } from '@/services/productionOrderService';
 
-export interface Recipe {
+export interface Recipe extends ServiceRecipe {
+  // Usar a interface do serviço como base
+}
+
+export interface OrderRecipe {
   id: string;
+  recipeId: string;
+  recipeName: string;
+  quantity: number;
+  unit: 'kg' | 'un';
+  convertedQuantity: number;
+}
+
+export interface MaterialItem {
+  id: number;
   name: string;
-  code: string;
-  yield_kg: number;
-  yield_units: number;
-  instructions: string;
-  photo_url: string;
-  gif_url: string;
-  cost_per_kg: number;
-  cost_per_unit: number;
-  group_id: string;
-  subgroup_id: string;
-  all_days: boolean;
-  monday: boolean;
-  tuesday: boolean;
-  wednesday: boolean;
-  thursday: boolean;
-  friday: boolean;
-  saturday: boolean;
-  sunday: boolean;
-  subRecipes?: {
-    id: string;
-    name: string;
-    yield: number;
-    amount: number;
-    unit: string;
-  }[];
-  ingredients?: {
-    id: number;
-    name: string;
-    amount: number;
-    unit: string;
-    type: 'raw' | 'sub';
-  }[];
+  totalQuantity: number;
+  unit: string;
 }
 
-interface UseProductionOrderProps {
-  id?: string;
-  calendarItems?: Array<{
-    recipe_id: string | null;
-    recipe_name: string;
-    planned_quantity_kg: number;
-    planned_quantity_units: number | null;
-    unit: string;
-  }>;
-  calendarDate?: string;
-}
-
-export default function useProductionOrder({ id, calendarItems, calendarDate }: UseProductionOrderProps = {}) {
+export default function useProductionOrder({ id, calendarItems, calendarDate }: { id?: string; calendarItems?: Array<{ recipe_id: string | null; recipe_name: string; planned_quantity_kg: number; planned_quantity_units: number | null; unit: string }>; calendarDate?: string } = {}) {
   const { activeCompany, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(true);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
@@ -78,16 +48,12 @@ export default function useProductionOrder({ id, calendarItems, calendarDate }: 
   const [loadingMaterials, setLoadingMaterials] = useState(false);
   
   const navigate = useNavigate();
-  const { toast } = useToast();
   
   useEffect(() => {
     const loadRecipes = async () => {
       if (authLoading || !activeCompany?.id) {
-        toast({
-          title: 'Empresa ativa não carregada',
-          description: 'Tente novamente mais tarde.',
-          variant: 'destructive',
-        });
+        console.error("Empresa ativa não carregada");
+        toast.error("Empresa ativa não carregada");
         setLoading(false);
         return;
       }
@@ -169,12 +135,8 @@ export default function useProductionOrder({ id, calendarItems, calendarDate }: 
         setOrderRecipes(orderItems);
       }
     } catch (error) {
-      console.error("Error loading production order:", error);
-      toast({
-        title: "Erro",
-        description: "Não foi possível carregar o pedido de produção.",
-        variant: "destructive"
-      });
+      console.error("Erro ao carregar pedido de produção:", error);
+      toast.error("Erro ao carregar pedido de produção");
     }
   };
   
@@ -192,70 +154,72 @@ export default function useProductionOrder({ id, calendarItems, calendarDate }: 
   };
   
   const calculateMaterials = async () => {
+    console.log('calculateMaterials started');
     setLoadingMaterials(true);
-    const materialsMap = new Map<string, MaterialItem>();
-    let materialId = 1;
     
-    if (!activeCompany?.id) return; // Adiciona verificação
+    if (!activeCompany?.id) {
+      console.log('No activeCompany.id found, returning early');
+      setLoadingMaterials(false);
+      return;
+    }
+
+    console.log('activeCompany.id:', activeCompany.id);
+    console.log('orderRecipes to process:', orderRecipes);
 
     try {
-      for (const orderRecipe of orderRecipes) {
-        const recipe = recipes.find(r => r.id === orderRecipe.recipeId);
+      // Converter orderRecipes para o formato esperado pela função do Supabase
+      const orderRecipesFormatted: ServiceOrderRecipe[] = orderRecipes.map(orderRecipe => {
+        // Usar convertedQuantity quando quantity for 0 ou não estiver definido
+        const effectiveQuantity = orderRecipe.quantity > 0 ? orderRecipe.quantity : orderRecipe.convertedQuantity;
         
-        if (recipe) {
-          console.log(`Calculando materiais para ${recipe.name} (${orderRecipe.quantity} ${orderRecipe.unit})`);
-          
-          let quantityInKg = orderRecipe.quantity;
-          if (orderRecipe.unit === 'un' && recipe.yield_units && recipe.yield_units > 0) {
-            quantityInKg = orderRecipe.quantity * (recipe.yield_kg / recipe.yield_units);
-          }
-          
-          // Garantir que companyId (activeCompany.id) está sendo passado
-          const ingredients = await getAllRecipeIngredients(recipe.id, activeCompany.id, quantityInKg);
-          
-          for (const ingredient of ingredients) {
-            if (ingredient.product_id && ingredient.product) {
-              const key = `${ingredient.product_id}-${ingredient.unit}`;
-              
-              if (materialsMap.has(key)) {
-                const existingMaterial = materialsMap.get(key)!;
-                existingMaterial.totalQuantity += ingredient.quantity;
-              } else {
-                materialsMap.set(key, {
-                  id: materialId++,
-                  name: ingredient.product.name,
-                  totalQuantity: ingredient.quantity,
-                  unit: ingredient.unit
-                });
-              }
-            }
-          }
-        }
-      }
-      
-      const materialsList = Array.from(materialsMap.values())
-        .sort((a, b) => a.name.localeCompare(b.name));
-      
-      setMaterials(materialsList);
-    } catch (error) {
-      console.error("Erro ao calcular lista de materiais:", error);
-      toast({
-        title: "Erro",
-        description: "Não foi possível calcular a lista de materiais.",
-        variant: "destructive"
+        console.log(`Receita ${orderRecipe.recipeName}: usando quantidade ${effectiveQuantity} (original: ${orderRecipe.quantity}, convertida: ${orderRecipe.convertedQuantity})`);
+        
+        return {
+          recipeId: orderRecipe.recipeId,
+          recipeName: orderRecipe.recipeName,
+          quantity: effectiveQuantity, // Usar a quantidade efetiva
+          unit: orderRecipe.unit
+        };
       });
+
+      console.log('Calling calculateMaterialsList with formatted data:', orderRecipesFormatted);
+
+      // Chamar a função do Supabase
+      const materialsData = await calculateMaterialsList(activeCompany.id, orderRecipesFormatted);
+      
+      console.log('calculateMaterialsList returned:', materialsData);
+
+      // Converter para o formato esperado pelo componente
+      const materialsMap = new Map<string, MaterialItem>();
+      let materialId = 1;
+
+      materialsData.forEach((material) => {
+        const key = material.product_id;
+        materialsMap.set(key, {
+          id: materialId++,
+          name: material.product_name,
+          totalQuantity: material.total_quantity,
+          unit: material.product_unit, // Usando product_unit em vez de unit
+        });
+      });
+
+      setMaterials(Array.from(materialsMap.values()));
+      console.log('Materials calculated successfully:', Array.from(materialsMap.values()));
+    } catch (error) {
+      console.error('Error in calculateMaterials:', error);
+      setMaterials([]);
     } finally {
       setLoadingMaterials(false);
     }
   };
   
   const openMaterialsList = async () => {
+    console.log('openMaterialsList called with orderRecipes:', orderRecipes);
+    console.log('orderRecipes length:', orderRecipes.length);
+    
     if (orderRecipes.length === 0) {
-      toast({
-        title: "Sem receitas",
-        description: "Adicione receitas ao pedido para visualizar a lista de materiais.",
-        variant: "destructive"
-      });
+      console.log('No orderRecipes found, showing toast');
+      toast.error("Sem receitas");
       return;
     }
     
@@ -265,11 +229,7 @@ export default function useProductionOrder({ id, calendarItems, calendarDate }: 
   
   const handleSave = async () => {
     if (orderRecipes.length === 0) {
-      toast({
-        title: "Receitas obrigatórias",
-        description: "Adicione pelo menos uma receita ao pedido.",
-        variant: "destructive"
-      });
+      toast.error("Receitas obrigatórias");
       return;
     }
     
@@ -293,11 +253,7 @@ export default function useProductionOrder({ id, calendarItems, calendarDate }: 
         // Apenas o status pode ser atualizado via handleStatusUpdate.
         // Se precisar editar detalhes, uma nova função 'updateProductionOrder' seria necessária no serviço.
         // Por agora, a edição de detalhes não será salva.
-        toast({
-          title: "Edição não suportada",
-          description: "Apenas a criação de novos pedidos e a atualização de status são suportadas no momento.",
-          variant: "default" // Mudar para 'default' ou 'destructive'
-        });
+        toast.error("Edição não suportada");
         success = false; // Define success como false para não redirecionar
       } else {
         // Criação (objeto precisa de companyId)
@@ -318,11 +274,7 @@ export default function useProductionOrder({ id, calendarItems, calendarDate }: 
       }
     } catch (error) {
       console.error("Erro ao salvar pedido:", error);
-      toast({
-        title: "Erro",
-        description: "Não foi possível salvar o pedido de produção.",
-        variant: "destructive"
-      });
+      toast.error("Erro ao salvar pedido de produção");
     } finally {
       setLoading(false);
     }
@@ -344,11 +296,7 @@ export default function useProductionOrder({ id, calendarItems, calendarDate }: 
       }
     } catch (error) {
       console.error("Erro ao atualizar status:", error);
-      toast({
-        title: "Erro",
-        description: "Não foi possível atualizar o status do pedido de produção.",
-        variant: "destructive"
-      });
+      toast.error("Erro ao atualizar status do pedido de produção");
     } finally {
       setLoading(false);
     }
