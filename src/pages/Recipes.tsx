@@ -110,10 +110,12 @@ export default function Recipes() {
   };
   
   useEffect(() => {
-    fetchRecipes();
-    fetchGroups();
-    fetchSubgroups();
-  }, []);
+    if (!authLoading && activeCompany?.id) {
+      fetchRecipes();
+      fetchGroups();
+      fetchSubgroups();
+    }
+  }, [activeCompany?.id, authLoading]);
   
   // Filtrar subgrupos com base no grupo selecionado
   useEffect(() => {

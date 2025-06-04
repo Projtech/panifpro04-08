@@ -70,7 +70,7 @@ export default function useProductionOrder({ id, calendarItems, calendarDate }: 
     };
     
     loadRecipes();
-  }, [id]);
+  }, [id, activeCompany?.id, authLoading]);
   
   useEffect(() => {
     // Detect if navigation came from calendar
