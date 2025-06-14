@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { EyeIcon } from './EyeIcon';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,8 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-
-import { useEffect } from 'react';
+import { EyeIcon } from './EyeIcon';
 
 export function Login() {
   const [email, setEmail] = useState('');
@@ -84,32 +82,22 @@ export function Login() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Senha</Label>
-              <div style={{ position: 'relative' }}>
+              <div className="relative">
                 <Input 
                   id="password" 
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  style={{ paddingRight: 36 }}
+                  className="pr-10"
                 />
                 <button
                   type="button"
                   aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
                   onClick={() => setShowPassword((v) => !v)}
-                  style={{
-                    position: 'absolute',
-                    right: 8,
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    background: 'none',
-                    border: 'none',
-                    padding: 0,
-                    cursor: 'pointer',
-                  }}
-                  tabIndex={-1}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md hover:bg-gray-100 transition-colors"
                 >
-                  <EyeIcon open={showPassword} />
+                  <EyeIcon open={showPassword} className="text-muted-foreground hover:text-foreground" />
                 </button>
               </div>
             </div>

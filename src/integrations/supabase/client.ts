@@ -8,12 +8,12 @@ const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiO
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
-// Opções para o cliente Supabase, especificando sessionStorage para auth
+// Opções para o cliente Supabase, especificando localStorage para auth
 const supabaseOptions: SupabaseClientOptions<"public"> = {
   auth: {
-    storage: localStorage, // Usar localStorage para persistência de sessão
+    storage: localStorage, // Usar localStorage para permitir atualizações de página
     autoRefreshToken: true,
-    persistSession: true,
+    persistSession: true, // Permitir persistência para atualizações de página
     detectSessionInUrl: true
   },
 };

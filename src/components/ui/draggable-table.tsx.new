@@ -1,8 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
-import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
-import { Settings2, RotateCcw, GripVertical } from 'lucide-react';
+import { Settings2, RotateCcw } from 'lucide-react';
 import { Checkbox } from './checkbox';
 import { Button } from './button';
 import {
@@ -61,7 +58,6 @@ export const DraggableTable: React.FC<DraggableTableProps> = ({
   const [columns, setColumns] = useState<ColumnDef[]>([...initialColumns]);
   const [showConfigMenu, setShowConfigMenu] = useState(false);
   const [isConfigLoading, setIsConfigLoading] = useState(false);
-  const { toast: showToast } = useToast();
 
   // Carregar configuração salva
   useEffect(() => {
@@ -124,6 +120,7 @@ export const DraggableTable: React.FC<DraggableTableProps> = ({
       
       // Tentar carregar do banco de dados primeiro
       try {
+        // @ts-ignore - Ignorar erro de tipo, pois a tabela pode não existir ainda
         const { data, error: fetchConfigError } = await supabase
           .from('user_table_configs')
           .select('config')
@@ -151,8 +148,7 @@ export const DraggableTable: React.FC<DraggableTableProps> = ({
 
         // Se data for null (nenhuma config encontrada no DB) ou se data.config for null/undefined
         if (data && data.config) {
-          // O tipo correto agora é Database['public']['Tables']['user_table_configs']['Row']
-          const savedConfig = data.config as unknown as ColumnConfig[];
+          const savedConfig = data.config as ColumnConfig[];
           applyConfig(savedConfig);
         } else {
           // Nenhuma config no DB, tentar localStorage como fallback secundário
@@ -172,6 +168,8 @@ export const DraggableTable: React.FC<DraggableTableProps> = ({
       setIsConfigLoading(false);
     }
   };
+
+  const { toast: showToast } = useToast();
 
   const saveTableConfig = async () => {
     if (!user) return;
@@ -272,14 +270,22 @@ export const DraggableTable: React.FC<DraggableTableProps> = ({
           variant: "destructive",
         });
       }
+    } catch (error) {
+      console.error('Erro ao salvar configuração:', error);
+      toast({
+        title: "Erro ao salvar configuração",
+        description: "Ocorreu um erro ao salvar suas preferências.",
+        variant: "destructive",
+      });
     } finally {
       setIsConfigLoading(false);
+      setShowConfigMenu(false);
     }
   };
 
   // Função para gerenciar mudanças na configuração
   const handleConfigChange = () => {
-    // NÃO salvamos automaticamente, apenas quando o usuário clicar em Salvar
+    // Não salvamos automaticamente, apenas quando o usuário clicar em Salvar
   };
 
   const handleToggleColumn = (columnId: string) => {
@@ -293,21 +299,6 @@ export const DraggableTable: React.FC<DraggableTableProps> = ({
     handleConfigChange();
   };
 
-  // Função para lidar com a reordenação das colunas
-  const handleDragEnd = (event: any) => {
-    const { active, over } = event;
-    
-    if (active.id !== over.id) {
-      setColumns((items) => {
-        const oldIndex = items.findIndex(item => item.id === active.id);
-        const newIndex = items.findIndex(item => item.id === over.id);
-        
-        return arrayMove(items, oldIndex, newIndex);
-      });
-      handleConfigChange();
-    }
-  };
-
   const resetToDefault = () => {
     setColumns([...initialColumns]);
     showToast({
@@ -315,49 +306,6 @@ export const DraggableTable: React.FC<DraggableTableProps> = ({
       description: "A tabela foi restaurada para a configuração padrão.",
     });
     handleConfigChange();
-  };
-
-  // Componente para cada item ordenável na lista de colunas
-  const SortableItem = ({ id, hidden, label, onToggle }: { id: string, hidden: boolean, label: string, onToggle: () => void }) => {
-    const {
-      attributes,
-      listeners,
-      setNodeRef,
-      transform,
-      transition,
-    } = useSortable({ id });
-    
-    const style = {
-      transform: CSS.Transform.toString(transform),
-      transition,
-    };
-    
-    return (
-      <div 
-        ref={setNodeRef}
-        style={style}
-        className={`flex items-center justify-between p-2 rounded-md border ${hidden ? 'bg-muted/50' : 'bg-background'}`}
-      >
-        <div className="flex items-center gap-2">
-          <button 
-            {...attributes} 
-            {...listeners}
-            className="cursor-grab touch-none"
-            aria-label="Reordenar coluna"
-          >
-            <GripVertical className="h-4 w-4 text-muted-foreground" />
-          </button>
-          <span className={hidden ? 'text-muted-foreground' : 'font-medium'}>
-            {label}
-          </span>
-        </div>
-        <Checkbox
-          checked={!hidden}
-          onCheckedChange={onToggle}
-          aria-label={`Mostrar coluna ${label}`}
-        />
-      </div>
-    );
   };
 
   // Filtrar colunas visíveis
@@ -390,32 +338,23 @@ export const DraggableTable: React.FC<DraggableTableProps> = ({
                   Restaurar
                 </Button>
               </div>
+              
               <div className="space-y-1 max-h-[300px] overflow-y-auto pr-1">
-                <DndContext 
-                  sensors={useSensors(
-                    useSensor(PointerSensor),
-                    useSensor(KeyboardSensor, {
-                      coordinateGetter: sortableKeyboardCoordinates,
-                    })
-                  )}
-                  collisionDetection={closestCenter}
-                  onDragEnd={handleDragEnd}
-                >
-                  <SortableContext 
-                    items={columns.map(col => col.id)} 
-                    strategy={verticalListSortingStrategy}
+                {columns.map((col) => (
+                  <div 
+                    key={col.id}
+                    className={`flex items-center justify-between p-2 rounded-md border ${col.hidden ? 'bg-muted/50' : 'bg-background'}`}
                   >
-                    {columns.map((col) => (
-                      <SortableItem 
-                        key={col.id} 
-                        id={col.id}
-                        hidden={!!col.hidden}
-                        label={typeof col.header === 'string' ? col.header : col.id}
-                        onToggle={() => handleToggleColumn(col.id)}
-                      />
-                    ))}
-                  </SortableContext>
-                </DndContext>
+                    <span className={col.hidden ? 'text-muted-foreground' : 'font-medium'}>
+                      {typeof col.header === 'string' ? col.header : col.id}
+                    </span>
+                    <Checkbox
+                      checked={!col.hidden}
+                      onCheckedChange={() => handleToggleColumn(col.id)}
+                      aria-label={`Mostrar coluna ${typeof col.header === 'string' ? col.header : col.id}`}
+                    />
+                  </div>
+                ))}
               </div>
               <Button 
                 onClick={saveTableConfig} 
@@ -428,6 +367,7 @@ export const DraggableTable: React.FC<DraggableTableProps> = ({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+
       <div className="w-full overflow-auto">
         <table className="w-full border-collapse">
           <thead>
