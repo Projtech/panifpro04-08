@@ -8,14 +8,9 @@ export async function getProductInventory(companyId: string): Promise<ProductInv
   console.log("[INVENTORY] Fetching product inventory...");
   try {
     // This gets products with their current_stock values and recipe information
-    const { data: products, error } = await supabase
-      .from('products')
-      .select(`
-        *,
-        recipe:recipes(name, code, yield_kg, yield_units, cost_per_kg, cost_per_unit)
-      `)
-      .eq('company_id', companyId)
-      .order('name');
+    // Usamos um RPC para garantir que apenas produtos com receitas ativas (não deletadas) sejam retornados,
+    // além das matérias-primas ativas.
+    const { data: products, error } = await supabase.rpc('get_inventory_products', { p_company_id: companyId });
     
     if (error) throw error;
     

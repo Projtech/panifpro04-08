@@ -15,7 +15,8 @@ import {
   FolderTree,
   Users,
   PackageCheck,
-  Layers
+  Layers,
+  Tag
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -44,6 +45,11 @@ const menuItems = [
     title: "Grupos, Subgrupos e Setores",
     icon: FolderTree,
     path: "/groups",
+  },
+  {
+    title: "Tipos de Produto",
+    icon: Tag,
+    path: "/tipos-de-produto",
   },
   {
     title: "Receitas",

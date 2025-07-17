@@ -89,7 +89,9 @@ const GroupsManagement = () => {
     setShowDeleteDialog,
     setGroupForm,
     setSubgroupForm,
-    handleAddSubgroup
+    handleAddSubgroup,
+    openDeleteDialog,
+    closeDeleteDialog
   } = useGroupManagement(groups, subgroups, loadData);
   
   // Adaptador para compatibilidade de tipos
@@ -107,14 +109,18 @@ const GroupsManagement = () => {
     setShowSetorDialog(true);
   };
   
-  const handleEditSetor = (setor: Setor) => {
-    fillSetorForm(setor);
-    setShowSetorDialog(true);
+  const handleEditSetor = (setorId: string) => {
+    const setor = setores.find(s => s.id === setorId);
+    if (setor) {
+      fillSetorForm(setor);
+      setShowSetorDialog(true);
+    }
   };
   
   const handleDeleteSetor = (id: string) => {
     setSetorToDelete(id);
-    setShowDeleteDialog(true);
+    // Usar a mesma lógica do useDialogControl para definir o tipo
+    openDeleteDialog('setor', id);
   };
   
   const handleConfirmDeleteSetor = async (): Promise<void> => {
@@ -123,9 +129,10 @@ const GroupsManagement = () => {
     try {
       const success = await deleteSetor(setorToDelete, activeCompany.id);
       if (success) {
-        loadData();
-        setShowDeleteDialog(false);
-        setSetorToDelete(null);
+        // Remove visualmente o setor da lista para feedback imediato
+        setSetores(prevSetores => prevSetores.filter(s => s.id !== setorToDelete));
+        closeDeleteDialog(); // Fechamos o diálogo usando a função correta
+        setSetorToDelete(null); // Limpamos o ID do setor a ser excluído
       }
     } catch (error) {
       console.error("Erro ao excluir setor:", error);
@@ -138,7 +145,7 @@ const GroupsManagement = () => {
   
   // Redefinir a função handleConfirmDelete para incluir setores
   const handleConfirmDeleteWithSetores = async (): Promise<void> => {
-    if (deleteType === 'setor' && setorToDelete) {
+    if (setorToDelete && deleteType === 'setor') {
       await handleConfirmDeleteSetor();
     } else {
       await originalHandleConfirmDelete();
@@ -255,7 +262,7 @@ const GroupsManagement = () => {
         open={showDeleteDialog}
         onOpenChange={setShowDeleteDialog}
         onConfirm={handleConfirmDeleteWithSetores}
-        type={deleteType || 'group'}
+        type={deleteType as 'group' | 'subgroup' | 'setor'}
         loading={loading}
       />
     </div>

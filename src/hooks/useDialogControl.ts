@@ -5,7 +5,7 @@ export const useDialogControl = () => {
   const [showGroupDialog, setShowGroupDialog] = useState(false);
   const [showSubgroupDialog, setShowSubgroupDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [deleteType, setDeleteType] = useState<'group' | 'subgroup'>('group');
+  const [deleteType, setDeleteType] = useState<'group' | 'subgroup' | 'setor'>('group');
   const [deleteId, setDeleteId] = useState<string>('');
 
   const openGroupDialog = () => setShowGroupDialog(true);
@@ -14,7 +14,7 @@ export const useDialogControl = () => {
   const openSubgroupDialog = () => setShowSubgroupDialog(true);
   const closeSubgroupDialog = () => setShowSubgroupDialog(false);
   
-  const openDeleteDialog = (type: 'group' | 'subgroup', id: string) => {
+  const openDeleteDialog = (type: 'group' | 'subgroup' | 'setor', id: string) => {
     setDeleteType(type);
     setDeleteId(id);
     setShowDeleteDialog(true);

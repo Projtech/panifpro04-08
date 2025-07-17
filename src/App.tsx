@@ -27,8 +27,9 @@ import AppLayout from "./components/Layout/AppLayout";
 import Dashboard from "./pages/Dashboard";
 import Products from "./pages/Products";
 import Inventory from "./pages/Inventory";
-import Recipes from "./pages/Recipes";
-import RecipeForm from "./pages/RecipeForm";
+import Recipes from './pages/Recipes';
+import RecipeForm from './pages/RecipeForm';
+import TiposDeProduto from './pages/TiposDeProduto';
 import ProductionCalendar from "./pages/ProductionCalendar";
 import ProductionOrders from "./pages/ProductionOrders";
 import ProductionOrderForm from "./pages/ProductionOrderForm";
@@ -211,7 +212,14 @@ const App = () => {
                     </ProtectedRoute>
                   } />
                   
-
+                  <Route path="/tipos-de-produto" element={
+                    <ProtectedRoute adminOnly>
+                      <AppLayout>
+                        <TiposDeProduto />
+                      </AppLayout>
+                    </ProtectedRoute>
+                  } />
+                  
                   
                   <Route path="/recipes" element={
                     <ProtectedRoute>

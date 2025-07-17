@@ -1,0 +1,102 @@
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+import { parseDecimalBR } from "@/lib/numberUtils";
+
+// Tipo para dados do banco de dados
+interface ProductFromDB {
+  id: string;
+  name: string;
+  unit: string;
+  sku: string | null;
+  supplier: string | null;
+  cost: number | null;
+  min_stock: number | null;
+  current_stock: number | null;
+  recipe_id: string | null;
+  unit_price: number | null;
+  unit_weight: number | null;
+  kg_weight: number | null;
+  group_id: string | null;
+  subgroup_id: string | null;
+  product_type_id: string | null;
+  code: string | null;
+  all_days: boolean | null;
+  monday: boolean | null;
+  tuesday: boolean | null;
+  wednesday: boolean | null;
+  thursday: boolean | null;
+  friday: boolean | null;
+  saturday: boolean | null;
+  sunday: boolean | null;
+  ativo: boolean | null;
+  is_deleted: boolean | null;
+  company_id: string | null;
+  created_at?: string;
+  updated_at?: string;
+  [key: string]: any; // Para permitir acesso a propriedades dinâmicas
+}
+
+// Interface para refletir a estrutura real do banco de dados
+export interface Product {
+  id: string; // UUID
+  name: string;
+  is_deleted?: boolean;
+  unit: string; // 'UN' ou 'Kg'
+  sku: string | null;
+  supplier: string | null;
+  cost: number | null; // Custo baseado na unidade (cost_per_unit ou cost_per_kg da receita)
+  min_stock: number | null; // Permitir null aqui, mas setar default 0 ao criar
+  current_stock: number | null;
+  recipe_id?: string | null; // UUID da receita vinculada
+  unit_price?: number | null; // Preço de venda por unidade (apenas para produtos em UN)
+  unit_weight?: number | null; // Peso por unidade em kg (apenas para produtos em UN)
+  kg_weight?: number | null; // Peso total em kg (apenas para produtos em Kg)
+  group_id?: string | null;
+  subgroup_id?: string | null;
+  setor_id?: string | null;
+  product_type_id?: string | null;
+  code?: string | null; // Código do produto
+  all_days?: boolean | null;
+  monday?: boolean | null;
+  tuesday?: boolean | null;
+  wednesday?: boolean | null;
+  thursday?: boolean | null;
+  friday?: boolean | null;
+  saturday?: boolean | null;
+  sunday?: boolean | null;
+  ativo?: boolean;
+  company_id?: string;
+}
+
+// Função para mapear dados do banco para o formato esperado pelo frontend
+function mapProductFromDB(data: any, companyId?: string): Product {
+  if (!data) {
+    console.warn("[mapProductFromDB] Dados nulos ou indefinidos recebidos");
+    // Retornar um produto vazio com valores padrão
+    return {
+      id: "",
+      name: "",
+      unit: "UN",
+      sku: null,
+      supplier: null,
+      cost: null,
+      min_stock: null,
+      current_stock: null,
+      company_id: companyId
+    } as Product;
+  }
+  
+  // Garantir que todos os campos necessários estejam presentes
+  return {
+    ...data,
+    // Definir valores padrão para campos possivelmente ausentes
+    unit: data.unit || "UN",
+    sku: data.sku || null,
+    supplier: data.supplier || null,
+    cost: data.cost !== undefined ? data.cost : null,
+    min_stock: data.min_stock !== undefined ? data.min_stock : 0,
+    current_stock: data.current_stock !== undefined ? data.current_stock : 0,
+    company_id: data.company_id || companyId || null,
+    ativo: data.ativo !== undefined ? data.ativo : true
+  } as Product;
+}

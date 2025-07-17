@@ -202,12 +202,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               `[AuthContext Listener #${listenerInstanceId} Event #${eventInstanceId}] ANTES da query company_users para user ${currentUser.id}`
             );
             const { data: companyUserData, error: companyError } = await supabase
-              .from('company_users')
-              .select('role, company:company_id(id, name)') // Ajuste os campos conforme necessário
-              .eq('user_id', currentUser.id)
-              .eq('status', 'active') // Filtra por associações ativas
-              .limit(1)
-              .maybeSingle();
+              .rpc('get_active_company_for_user', { user_uuid: currentUser.id })
+              .single();
 
             console.log(
               `[AuthContext Listener #${listenerInstanceId} Event #${eventInstanceId}] DEPOIS da query company_users. Resultado:`, {

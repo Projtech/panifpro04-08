@@ -92,9 +92,12 @@ export const useGroupManagement = (
       let success = false;
       if (deleteType === 'group') {
         success = await deleteGroup(deleteId, activeCompany.id);
-      } else {
+      } else if (deleteType === 'subgroup') {
         success = await deleteSubgroup(deleteId, activeCompany.id);
-      }
+      } 
+      // O tipo 'setor' será tratado no componente GroupsManagement
+      // usando a função handleConfirmDeleteSetor
+      
       if (success) {
         onUpdate();
         closeDeleteDialog();
@@ -129,6 +132,8 @@ export const useGroupManagement = (
     closeSubgroupDialog,
     setShowDeleteDialog: closeDeleteDialog,
     setGroupForm,
-    setSubgroupForm
+    setSubgroupForm,
+    openDeleteDialog,
+    closeDeleteDialog
   };
 };

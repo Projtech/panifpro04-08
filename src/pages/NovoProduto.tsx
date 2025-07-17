@@ -181,7 +181,6 @@ function NovoProduto() {
       </div>}>
         <ProductForm
           initialData={newProductInitialData}
-          forceProductType="materia_prima"
           onSubmit={handleCreateSubmit}
           onCancel={() => navigate(-1)} // Navigate back on cancel
           isLoading={loading}

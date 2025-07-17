@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -14,7 +15,9 @@ import { parseDecimalBR } from '@/lib/numberUtils';
 // Type Imports
 import { Database } from '@/integrations/supabase/types';
 import { Group, Subgroup } from '@/services/groupService'; // Assuming these types exist and are correct
-import { Product as ProductTypeFromService, ProductType } from '@/services/productService'; // Renamed to avoid conflict
+import { getProductTypes, ProductType, ensureSystemProductTypes, SYSTEM_PRODUCT_TYPES } from '@/services/productTypesService'; // Import system product types
+import { Product as ProductTypeFromService } from '@/services/productService';
+import type { ProductType as OldProductTypeEnum } from '@/services/productService';
 import { useNavigate, useParams } from "react-router-dom"; // Added useNavigate/useParams if used
 
 // Define Product type from Supabase schema - Use this if aligned with DB
@@ -38,7 +41,7 @@ export interface ProductFormData {
   unit_price: number | null;
   unit_weight: number | null;
   recipe_id: string | null; // Assuming recipe ID is UUID (string)
-  product_type: ProductType | null; // Use corrected type from productService
+  product_type_id: string | null;
   ativo?: boolean;
   company_id: string | null; // Assuming company ID is UUID (string)
   // Campos de dias da semana (booleanos)
@@ -60,6 +63,7 @@ export interface SubmissionData extends Omit<ProductFormData, 'group_id' | 'subg
   setor_id: string | null; // Keep as string if service expects string UUID
   company_id: string; // Ensure it's not null for submission
   recipe_id: string | null;
+  product_type?: string | null; // Incluído novamente para compatibilidade com a API
 };
 
 export interface ProductFormProps {
@@ -71,7 +75,7 @@ export interface ProductFormProps {
   groups: Group[]; // Assume Group has { id: string; name: string; ... }
   subgroups: Subgroup[]; // Assume Subgroup has { id: string; name: string; group_id: string; ... }
   setores?: { id: string; name: string; color?: string | null }[]; // Lista de setores disponíveis
-  forceProductType?: ProductType; // NOVO: força o tipo de produto (string para aceitar 'raw_material')
+  forceProductTypeId?: string; // NOVO: força o tipo de produto pelo ID
 }
 
 // Helper to safely convert value to number or keep null/undefined
@@ -99,6 +103,8 @@ const toBoolean = (value: any): boolean => {
     return false; // Default to false for other types
 };
 
+// Componentes auxiliares removidos para simplificar a implementação
+
 const ProductForm: React.FC<ProductFormProps> = ({
   initialData,
   onSubmit,
@@ -108,8 +114,8 @@ const ProductForm: React.FC<ProductFormProps> = ({
   groups,
   subgroups,
   setores = [],
-  forceProductType
-}) => {
+  forceProductTypeId
+}): React.ReactNode => {
   // Ref para controlar se o componente está montado
   const isMounted = useRef(true);
   
@@ -151,18 +157,45 @@ const ProductForm: React.FC<ProductFormProps> = ({
   }, []);
 
   const { activeCompany } = useAuth();
-  const navigate = useNavigate(); // Assuming navigation might be needed
+  const navigate = useNavigate();
+  
+  // A busca de tipos de produto já deve existir em outro lugar no arquivo
+
+  useEffect(() => {
+    if (activeCompany?.id) {
+      // Primeiro garantir que os tipos de sistema existam
+      ensureSystemProductTypes(activeCompany.id)
+        .then(() => {
+          console.log('Tipos de sistema verificados com sucesso');
+          // Depois carregar todos os tipos
+          return getProductTypes(activeCompany.id);
+        })
+        .then(types => {
+          console.log(`Carregados ${types.length} tipos de produto`);
+          setProductTypes(types);
+        })
+        .catch(err => {
+          console.error("Falha ao carregar os tipos de produto:", err);
+          toast.error('Falha ao carregar os tipos de produto.');
+        });
+    }
+  }, [activeCompany]); // Recarga quando a empresa ativa mudar
 
   // Constantes definidas uma vez
+  // Define os dias da semana com tipos corretos e literais
+  type WeekdayKey = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday';
+  
   const weekdays = [
-    { key: 'monday' as keyof ProductFormData, label: 'Seg' },
-    { key: 'tuesday' as keyof ProductFormData, label: 'Ter' },
-    { key: 'wednesday' as keyof ProductFormData, label: 'Qua' },
-    { key: 'thursday' as keyof ProductFormData, label: 'Qui' },
-    { key: 'friday' as keyof ProductFormData, label: 'Sex' },
-    { key: 'saturday' as keyof ProductFormData, label: 'Sáb' },
-    { key: 'sunday' as keyof ProductFormData, label: 'Dom' },
+    { key: 'monday' as WeekdayKey, label: 'Seg' },
+    { key: 'tuesday' as WeekdayKey, label: 'Ter' },
+    { key: 'wednesday' as WeekdayKey, label: 'Qua' },
+    { key: 'thursday' as WeekdayKey, label: 'Qui' },
+    { key: 'friday' as WeekdayKey, label: 'Sex' },
+    { key: 'saturday' as WeekdayKey, label: 'Sáb' },
+    { key: 'sunday' as WeekdayKey, label: 'Dom' },
   ] as const;
+  
+  // Funções para manipulação dos dias da semana
   
   // Garantir que os labels sejam sempre os abreviados, mesmo se houver override em algum lugar
 
@@ -179,6 +212,8 @@ const ProductForm: React.FC<ProductFormProps> = ({
   );
 
   // Função para obter valores padrão do formulário - Definida uma vez
+  // Removidas para evitar duplicações - movidas para depois da declaração de formData
+
   const getDefaultFormData = (): ProductFormData => ({
     name: '',
     sku: null,
@@ -194,7 +229,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
     unit_price: null,
     unit_weight: null,
     recipe_id: null, // string | null
-    product_type: forceProductType ?? null, // Se forçado, já define aqui
+    product_type_id: forceProductTypeId ?? null, // Se forçado, já define aqui
     ativo: true,
     company_id: activeCompany?.id || null, // string | null
     monday: false,
@@ -210,67 +245,144 @@ const ProductForm: React.FC<ProductFormProps> = ({
 
   // Estados do componente - Definidos uma vez
   const [formData, setFormData] = useState<ProductFormData>(getDefaultFormData());
+  
+  // Declaração única das variáveis e funções para dias da semana
+  // Definido como variável para ser recalculado a cada render
+  const allWeekdaysChecked = weekdays.every(day => toBoolean(formData[day.key]));
+  
+  const handleAllDaysChange = useCallback((checked: boolean) => {
+    setFormData(prev => {
+      const newData = { ...prev };
+      weekdays.forEach(day => {
+        // Usando uma abordagem tipada corretamente
+        newData[day.key] = checked;
+      });
+      return newData;
+    });
+  }, []);
+
+  const handleWeekdayChange = useCallback((key: WeekdayKey, checked: boolean) => {
+    setFormData(prev => ({
+      ...prev,
+      [key]: checked
+    }));
+  }, []);
+
+
+
   const [pesoComprado, setPesoComprado] = useState<string>('');
   const [valorPago, setValorPago] = useState<string>('');
   const [custoCalculado, setCustoCalculado] = useState<number>(0);
   const [errors, setErrors] = useState<Partial<Record<keyof ProductFormData, string>>>({});
   const [filteredSubgroups, setFilteredSubgroups] = useState<Subgroup[]>(subgroups);
-  const [similarNames, setSimilarNames] = useState<string[]>([]);
-  const [showSimilarAlert, setShowSimilarAlert] = useState(false);
-  const [hasExactName, setHasExactName] = useState(false);
-  const [pendingSubmit, setPendingSubmit] = useState<null | (() => void)>(null);
+  const [productTypes, setProductTypes] = useState<ProductType[]>([]);
+  // Estados relacionados a nomes duplicados removidos
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Funções para manipulação dos dias da semana foram movidas para escopo global do componente
 
   // Variável derivada para controlar se é produto de receita
   const isRecipeProduct = formData.recipe_id !== null;
   // NOVO: Se o tipo for forçado, nunca pode ser editado
-  const isProductTypeForced = !!forceProductType;
+  const isProductTypeForced = !!forceProductTypeId;
+  
+  // Verificar se o produto usa um tipo de sistema (protegido)
+  const isSystemProductType = useCallback((typeId: string | null): boolean => {
+    if (!typeId) return false;
+    
+    // Encontra o tipo pelo ID
+    const productType = productTypes.find(pt => pt.id === typeId);
+    if (!productType) return false;
+    
+    // Verifica se é um dos tipos do sistema
+    return SYSTEM_PRODUCT_TYPES.includes(productType.name.toLowerCase());
+  }, [productTypes]);
+  
+  // Verificar se o produto atual usa um tipo do sistema
+  const hasSystemProductType = isSystemProductType(formData.product_type_id);
 
-  // Função auxiliar para verificar se um campo está bloqueado - Definida uma vez
-  // Ajustada para desabilitar TUDO exceto os dias da semana E is_active
+  // Função auxiliar para verificar se um campo está bloqueado
+  // Atualmente configurada para não bloquear nenhum campo
   const isFieldDisabled = (fieldName: keyof ProductFormData): boolean => {
-    if (!isRecipeProduct || !isEditMode) { // Only disable in edit mode for recipe products
-      return false;
+    return false;
+  };
+  
+  // Função simples para atualizar campos de input
+  const handleInputChange = (fieldName: keyof ProductFormData, value: string) => {
+    setFormData(prev => ({ ...prev, [fieldName]: value }));
+    // Limpa erro se existir
+    if (errors[fieldName]) {
+      setErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[fieldName];
+        return newErrors;
+      });
     }
-    // Allow editing only these fields for recipe products
-    const editableFieldsForRecipe: Array<keyof ProductFormData> = [
-      'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday', 'all_days',
-      'ativo' // Allow changing active status? Confirm requirement. Assuming yes for now.
-    ];
-    // Disable if the field name is NOT in the editable list
-    return !editableFieldsForRecipe.includes(fieldName);
   };
 
-  // Efeito para calcular custo de matéria prima - Definido uma vez
+  // Efeito simplificado para calcular custo de matéria prima
   useEffect(() => {
-    // Verificar se o componente ainda está montado
-    if (!isMounted.current) return;
-    if (formData.product_type === 'materia_prima') {
-      // Só recalcula se o usuário digitou algo em Peso ou Valor
-      if (pesoComprado.trim() !== '' || valorPago.trim() !== '') {
-        const peso = parseDecimalBR(pesoComprado);
-        const valor = parseDecimalBR(valorPago);
-        if (!isNaN(peso) && peso > 0 && !isNaN(valor) && valor >= 0) {
-          safeSetState(setCustoCalculado, valor / peso);
-        } else {
-          // Mantém o último custo válido
+    // Log para debug dos tipos de produto disponíveis
+    console.log('[ProductForm] Tipos de produto:', productTypes);
+    console.log('[ProductForm] Tipo selecionado ID:', formData.product_type_id);
+    
+    // Encontra o tipo de produto pelo ID
+    const selectedProductType = productTypes.find(pt => pt.id === formData.product_type_id);
+    console.log('[ProductForm] Tipo selecionado:', selectedProductType);
+    
+    // Verifica se é matéria prima de forma mais flexível, considerando variações de escrita
+    const tipoBaixo = selectedProductType?.name?.toLowerCase() || '';
+    const isMateriaPrima = tipoBaixo.includes('materia') || tipoBaixo.includes('matéria');
+    
+    console.log('[ProductForm] É matéria prima?', isMateriaPrima);
+    console.log('[ProductForm] Valor atual dos campos - Peso:', pesoComprado, 'Valor:', valorPago);
+    
+    if (isMateriaPrima) {
+      // Só tenta calcular se tiver valores nos campos
+      if (pesoComprado || valorPago) {
+        try {
+          // Converte valores para números, substituindo vírgula por ponto
+          const pesoNumerico = pesoComprado ? Number(pesoComprado.replace(',', '.')) : 0;
+          const valorNumerico = valorPago ? Number(valorPago.replace(',', '.')) : 0;
+          
+          console.log('[ProductForm] Valores numéricos - Peso:', pesoNumerico, 'Valor:', valorNumerico);
+          
+          // Calcula o custo somente se peso for maior que zero
+          if (pesoNumerico > 0) {
+            const custoValor = valorNumerico / pesoNumerico;
+            setCustoCalculado(custoValor);
+            
+            // Atualiza o campo cost do formData com o valor calculado
+            setFormData(prev => ({
+              ...prev,
+              cost: custoValor
+            }));
+            
+            console.log('[ProductForm] Custo calculado:', custoValor, '- Atualizado no formData');
+          }
+        } catch (error) {
+          console.error('[ProductForm] Erro ao calcular custo:', error);
         }
       }
-      // Se ambos estiverem vazios, não faz nada (mantém custo carregado na edição)
     } else {
-      safeSetState(setCustoCalculado, 0);
-      safeSetState(setPesoComprado, '');
-      safeSetState(setValorPago, '');
+      // Se não é materia prima, limpa os campos
+      setCustoCalculado(0);
+      setPesoComprado('');
+      setValorPago('');
     }
-  }, [pesoComprado, valorPago, formData.product_type]);
+  }, [pesoComprado, valorPago, formData.product_type_id, productTypes]);
 
   // Função segura para atualização de estado - implementação síncrona
   const safeSetState = <T,>(setter: React.Dispatch<React.SetStateAction<T>>, value: React.SetStateAction<T>) => {
     // Verificação síncrona para evitar problemas de timing
     if (isMounted.current) {
       // Atualização direta do estado sem requestAnimationFrame
-      setter(value);
+      try {
+        setter(value);
+      } catch (error) {
+        console.error('[ProductForm] Erro ao atualizar estado:', error);
+      }
     } else {
       console.log('[ProductForm] Tentativa de atualizar estado em componente desmontado evitada');
     }
@@ -323,7 +435,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
         unit_price: toNumberOrNull(safeInitialData.unit_price),
         unit_weight: toNumberOrNull(safeInitialData.unit_weight),
         recipe_id: safeInitialData.recipe_id?.toString() ?? null,
-        product_type: (safeInitialData.product_type as ProductType) || null, // Use corrected type
+        product_type_id: forceProductTypeId || initialData?.product_type_id || null,
         ativo: toBoolean(safeInitialData.ativo ?? true), // Padronizado: só usa 'ativo', default true se ausente
         code: safeInitialData.code || null,
         // Weekdays
@@ -336,15 +448,15 @@ const ProductForm: React.FC<ProductFormProps> = ({
         sunday: toBoolean(safeInitialData.sunday),
         all_days: toBoolean(safeInitialData.all_days),
       };
-      // FORÇA 'Kg' SE FOR MATÉRIA PRIMA EM MODO DE EDIÇÃO
-      if (initialFormState.product_type === 'materia_prima') {
-        console.log('[DEBUG useEffect] Forçando unit para Kg em modo de edição.');
-        initialFormState.unit = 'Kg';
-      }
       safeSetState(setFormData, initialFormState);
 
       // Se for matéria prima em modo de edição, inicializa custoCalculado com o custo carregado do banco
-      if(initialFormState.product_type === 'materia_prima' && initialFormState.cost !== null) {
+      // Verificar se o tipo selecionado é matéria prima baseado no ID
+      const isMateriaPrima = initialFormState.product_type_id && productTypes.some(
+        pt => pt.id === initialFormState.product_type_id && pt.name.toLowerCase() === 'materia_prima'
+      );
+      
+      if(isMateriaPrima && initialFormState.cost !== null) {
           safeSetState(setCustoCalculado, initialFormState.cost);
           safeSetState(setPesoComprado, '');
           safeSetState(setValorPago, '');
@@ -360,16 +472,8 @@ const ProductForm: React.FC<ProductFormProps> = ({
       // Creation mode
       const defaultData = getDefaultFormData();
       defaultData.company_id = currentCompanyId;
-      const isNovoViaTelaProdutos = !initialData && !isEditMode;
-      if (isNovoViaTelaProdutos) {
-         defaultData.product_type = 'materia_prima';
-         defaultData.unit = 'Kg';
-      }
-      // FORÇA 'Kg' SE FOR MATÉRIA PRIMA EM MODO DE CRIAÇÃO
-      if (defaultData.product_type === 'materia_prima') {
-        console.log('[DEBUG useEffect] Forçando unit para Kg em modo de criação.');
-        defaultData.unit = 'Kg';
-      }
+      // Removida restrição que forçava tipo de produto para 'materia_prima' e unidade para 'Kg'
+      // Removida restrição que forçava 'Kg' para matéria prima em modo de criação
       safeSetState(setFormData, defaultData);
       safeSetState(setFilteredSubgroups, subgroups);
       safeSetState(setPesoComprado, '');
@@ -449,24 +553,28 @@ const ProductForm: React.FC<ProductFormProps> = ({
 
     // Value from Select is already string or null (if empty value option selected)
     // *** AJUSTE AQUI: Tratar '' OU 'none' como null ***
-    let processedValue: string | ProductType | null = (value === '' || value === 'none') ? null : value;
+    let processedValue: string | null = (value === '' || value === 'none') ? null : value;
 
-    // Handle product_type specifically if it's a select
-     if (key === 'product_type') {
-       // Ensure it's one of the allowed types or null
-       if (processedValue !== 'materia_prima' && processedValue !== 'subreceita' && processedValue !== 'receita') {
-         processedValue = null;
-       }
-     }
+    // Para product_type_id não precisamos verificar valores específicos
+    // pois agora é um ID dinâmico da tabela product_types
+    if (key === 'product_type_id' && processedValue !== null) {
+      // Verificamos apenas se é um ID válido na lista de tipos
+      const isValidId = productTypes.some(pt => pt.id === processedValue);
+      if (!isValidId) {
+        processedValue = null;
+      }
+    }
 
     // Atualização síncrona do estado
     if (isMounted.current) {
       setFormData(prev => {
         const updatedState = { ...prev, [key]: processedValue };
 
-        if (key === 'product_type') {
-          if (processedValue === 'materia_prima') {
-            updatedState.unit = 'Kg';
+        if (key === 'product_type_id') {
+          // Busca o tipo pelo ID para verificar se é matéria-prima
+          const selectedType = productTypes.find(pt => pt.id === processedValue);
+          if (selectedType && selectedType.name.toLowerCase() === 'materia_prima') {
+            // Removida restrição que forçava unidade para 'Kg'
             updatedState.cost = null; // Será calculado
             
             // Atualizar estados relacionados de forma síncrona
@@ -475,7 +583,8 @@ const ProductForm: React.FC<ProductFormProps> = ({
             setCustoCalculado(0);
           } else {
             // Reset cost if changing *from* materia_prima
-            if (prev.product_type === 'materia_prima') updatedState.cost = null;
+            const prevType = productTypes.find(pt => pt.id === prev.product_type_id);
+            if (prevType && prevType.name.toLowerCase() === 'materia_prima') updatedState.cost = null;
           }
         }
 
@@ -516,7 +625,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
     const newErrors: Partial<Record<keyof ProductFormData, string>> = {};
 
     if (!formData.name?.trim()) newErrors.name = 'Nome é obrigatório.';
-    if (!formData.product_type) newErrors.product_type = 'Tipo de produto é obrigatório.';
+    if (!formData.product_type_id) newErrors.product_type_id = 'Tipo de produto é obrigatório.';
 
     // Only validate fields that are NOT disabled
     const checkField = (field: keyof ProductFormData, validation: () => string | null) => {
@@ -528,29 +637,42 @@ const ProductForm: React.FC<ProductFormProps> = ({
 
     checkField('unit', () => !formData.unit ? 'Unidade é obrigatória.' : null);
 
-    if (formData.product_type === 'materia_prima') {
-    const pesoStr = pesoComprado;
-    const valorStr = valorPago;
-    const pesoNum = parseDecimalBR(pesoStr);
-    const valorNum = parseDecimalBR(valorStr);
-    // Só valida Peso/Valor se for CRIAÇÃO ou se os campos foram PREENCHIDOS na edição
-    if (!isEditMode || (isEditMode && (pesoStr.trim() !== '' || valorStr.trim() !== ''))) {
-        checkField('cost', () => (isNaN(pesoNum) || pesoNum <= 0) ? 'Para Matéria Prima, informe Peso Comprado válido (> 0).' : null);
-        checkField('cost', () => {
-            const err = (isNaN(valorNum) || valorNum < 0) ? 'Para Matéria Prima, informe Valor Pago válido (>= 0).' : null;
-            if (err) newErrors.cost = (newErrors.cost ? newErrors.cost + ' ' : '') + err;
-            return null; // Error added diretamente
-        });
+    // Verificar se o tipo de produto é matéria-prima pelo id
+    const isMateriaPrima = formData.product_type_id && productTypes.some(pt => 
+        pt.id === formData.product_type_id && pt.name.toLowerCase() === 'materia_prima'
+    );
+    
+    if (isMateriaPrima) {
+        const pesoStr = pesoComprado;
+        const valorStr = valorPago;
+        const pesoNum = parseDecimalBR(pesoStr);
+        const valorNum = parseDecimalBR(valorStr);
+        // Só valida Peso/Valor se for CRIAÇÃO ou se os campos foram PREENCHIDOS na edição
+        if (!isEditMode || (isEditMode && (pesoStr.trim() !== '' || valorStr.trim() !== ''))) {
+            checkField('cost', () => (isNaN(pesoNum) || pesoNum <= 0) ? 'Para Matéria Prima, informe Peso Comprado válido (> 0).' : null);
+            checkField('cost', () => {
+                const err = (isNaN(valorNum) || valorNum < 0) ? 'Para Matéria Prima, informe Valor Pago válido (>= 0).' : null;
+                if (err) newErrors.cost = (newErrors.cost ? newErrors.cost + ' ' : '') + err;
+                return null; // Error added diretamente
+            });
+        }
     }
-    checkField('unit', () => formData.unit !== 'Kg' ? 'Matéria prima deve ter unidade Kg.' : null);
-} else if (formData.product_type === 'receita' || formData.product_type === 'subreceita') {
+    // Removida validação que forçava unidade 'Kg' para matéria prima
+    
+    // Verificar se o tipo é receita ou subreceita
+    const isReceitaOrSubreceita = formData.product_type_id && productTypes.some(pt => 
+        pt.id === formData.product_type_id && 
+        (pt.name.toLowerCase() === 'receita' || pt.name.toLowerCase() === 'subreceita')
+    );
+    
+    if (isReceitaOrSubreceita) {
         // Validation for recipe/sub-recipe PRODUCTS (not the recipe itself)
         // Cost should come from linked recipe, but check if null perhaps?
         checkField('cost', () => (formData.cost === null || formData.cost < 0) ? 'Custo deve ser um número não negativo.' : null);
 
         if (formData.unit === 'Kg') {
-             checkField('kg_weight', () => (formData.kg_weight === null || formData.kg_weight <= 0) ? 'Para produtos em Kg, informe o Peso Total (Kg).' : null); // Assuming kg_weight is total yield
-             checkField('unit_price', () => formData.unit_price !== null ? 'Preço unitário não aplicável para venda em Kg.' : null);
+            checkField('kg_weight', () => (formData.kg_weight === null || formData.kg_weight <= 0) ? 'Para produtos em Kg, informe o Peso Total (Kg).' : null); // Assuming kg_weight is total yield
+            checkField('unit_price', () => formData.unit_price !== null ? 'Preço unitário não aplicável para venda em Kg.' : null);
         } else if (formData.unit === 'UN') {
              checkField('unit_weight', () => (formData.unit_weight === null || formData.unit_weight <= 0) ? 'Para produtos em Unidade, informe o Peso por Unidade (Kg).' : null);
              checkField('unit_price', () => (formData.unit_price !== null && formData.unit_price < 0) ? 'Preço de Venda por Unidade não pode ser negativo.' : null);
@@ -564,160 +686,66 @@ const ProductForm: React.FC<ProductFormProps> = ({
 
     console.log('[DEBUG validateForm] Objeto newErrors calculado:', JSON.stringify(newErrors));
     safeSetState(setErrors, newErrors);
-    const isValidResult = Object.keys(newErrors).length === 0;
-    console.log('[DEBUG validateForm] newErrors final:', JSON.stringify(newErrors), 'Retornando isValid:', isValidResult);
-    return isValidResult;
+    return Object.keys(newErrors).length === 0;
   };
 
-  // Checagem de nomes semelhantes - Definida uma vez
-  const checkSimilarNamesAndExact = useCallback(async (name: string) => {
-    if (!name || name.trim().length < 3) return { similars: [], exact: false };
-    if (!activeCompany?.id) {
-      console.error("Empresa ativa não encontrada para checar nomes similares.");
-      toast.error("Não foi possível verificar nomes similares: Empresa não identificada.");
-      return { similars: [], exact: false };
-    }
-    try {
-      const results = await findSimilarProductsByName(name.trim(), activeCompany.id);
-      const lowerTyped = name.trim().toLowerCase();
-      const currentProductId = formData?.id; // Use ID from state if available
-      const filtered = isEditMode && currentProductId
-        ? results.filter(prod => prod.id !== currentProductId)
-        : results;
-      const similars = filtered.filter(prod => prod.name.toLowerCase() !== lowerTyped).map(prod => prod.name);
-      const exact = filtered.some(prod => prod.name.toLowerCase() === lowerTyped);
-      return { similars, exact };
-    } catch (error) {
-        console.error("Erro ao buscar nomes similares:", error);
-        toast.error("Erro ao verificar nomes similares.");
-        return { similars: [], exact: false };
-    }
-  }, [activeCompany, isEditMode, formData?.id]); // Use formData.id dependency
+  // Função de verificação de nomes similares removida - permitindo nomes duplicados
 
-  // Handler para blur do campo nome - Definido uma vez
-  const handleNameBlur = useCallback(async () => {
-    if (isFieldDisabled('name')) return; // Don't check if disabled
-
-    const nameToCheck = formData.name;
-    if (nameToCheck && nameToCheck.trim().length >= 3) {
-      const { similars, exact } = await checkSimilarNamesAndExact(nameToCheck);
-      if (formData.name === nameToCheck) { // Ensure name hasn't changed during async check
-          safeSetState(setHasExactName, exact);
-          safeSetState(setSimilarNames, similars);
-          safeSetState(setShowSimilarAlert, similars.length > 0 && !exact);
-          if (exact) safeSetState(setErrors, prev => ({...prev, name: 'Já existe um produto com este nome.'}));
-          else if (errors.name === 'Já existe um produto com este nome.') safeSetState(setErrors, prev => { delete prev.name; return {...prev}; });
-      }
-    } else {
-        safeSetState(setHasExactName, false);
-        safeSetState(setSimilarNames, []);
-        safeSetState(setShowSimilarAlert, false);
-        if (errors.name === 'Já existe um produto com este nome.') safeSetState(setErrors, prev => { delete prev.name; return {...prev}; });
-    }
-  }, [formData.name, checkSimilarNamesAndExact, isFieldDisabled, errors.name]); // Added dependencies
-
-  // Função separada para a lógica de envio real
+  // Handler para blur do campo nome - Simplificado (remoção da verificação de duplicidade)
+  const handleNameBlur = useCallback(() => {
+    // Função vazia - verificação de nomes similares removida
+    return;
+  }, []);
+  
+  // Função para executar a submissão do formulário
   const executeSubmit = async (companyId: string) => {
-    // Verificar se o componente ainda está montado
-    if (!isMounted.current) {
-      console.log('[ProductForm] Tentativa de executar submissão após desmontagem');
-      return;
+    try {
+      // Mapear o product_type_id para o formato esperado pela API (product_type string)
+      // A API pode estar esperando 'materia_prima', 'receita' ou 'subreceita'
+      let productTypeValue: string | null = null;
+      
+      if (formData.product_type_id) {
+        // Encontrar o tipo pelo ID
+        const selectedType = productTypes.find(pt => pt.id === formData.product_type_id);
+        
+        if (selectedType) {
+          // Converter o nome para o formato esperado pela API
+          const typeName = selectedType.name.toLowerCase();
+          if (typeName.includes('mat')) {
+            productTypeValue = 'materia_prima';
+          } else if (typeName.includes('receita') && !typeName.includes('sub')) {
+            productTypeValue = 'receita';
+          } else if (typeName.includes('sub')) {
+            productTypeValue = 'subreceita';
+          }
+          
+          console.log(`[ProductForm] Convertendo tipo de produto: ${selectedType.name} -> ${productTypeValue}`);
+        }
+      }
+
+      // Preparar os dados para submissão conforme a interface SubmissionData
+      const submissionData: SubmissionData = {
+        ...formData,
+        company_id: companyId,
+        // Incluir TANTO product_type_id quanto product_type para compatibilidade
+        product_type: productTypeValue 
+      };
+      
+      console.log('[ProductForm] Dados de submissão:', submissionData);
+      
+      await onSubmit(submissionData);
+      safeSetState(setSuccessMsg, 'Produto salvo com sucesso!');
+      toast.success('Produto salvo com sucesso!');
+    } catch (error) {
+      console.error('[ProductForm] Erro ao salvar produto:', error);
+      safeSetState(setErrorMsg, 'Erro ao salvar produto. Tente novamente.');
+      toast.error('Erro ao salvar produto.');
     }
-        safeSetState(setShowSimilarAlert, false);
-        safeSetState(setPendingSubmit, null);
-
-        let finalCost = formData.cost;
-
-        // Get cost from calculation if materia prima
-        if (formData.product_type === 'materia_prima') {
-             finalCost = custoCalculado;
-        }
-
-        // Prepare data for submission, converting back to numbers where needed by service/DB
-        // Use SubmissionData type to guide payload structure
-        const dataToSend: SubmissionData = {
-            // Cast formData to ensure base types match SubmissionData where possible
-             ...(formData as Omit<ProductFormData, 'company_id'>), // Exclude company_id temporarily
-             company_id: companyId, // Ensure correct companyId (already string)
-             // Ensure numbers are numbers, nulls are nulls
-             cost: finalCost, // Already number or null
-             current_stock: toNumberOrNull(formData.current_stock),
-             min_stock: toNumberOrNull(formData.min_stock) ?? 0,
-             kg_weight: toNumberOrNull(formData.kg_weight),
-             unit_price: toNumberOrNull(formData.unit_price),
-             unit_weight: toNumberOrNull(formData.unit_weight),
-             // IDs are kept as string | null as defined in SubmissionData for now
-             group_id: formData.group_id,
-             subgroup_id: formData.subgroup_id,
-             recipe_id: formData.recipe_id,
-             // Booleans
-             ativo: toBoolean(formData.ativo),
-             monday: toBoolean(formData.monday),
-             tuesday: toBoolean(formData.tuesday),
-             wednesday: toBoolean(formData.wednesday),
-             thursday: toBoolean(formData.thursday),
-             friday: toBoolean(formData.friday),
-             saturday: toBoolean(formData.saturday),
-             sunday: toBoolean(formData.sunday),
-             all_days: toBoolean(formData.all_days),
-        };
-
-
-        // Remove fields irrelevant based on type before sending
-        if (dataToSend.product_type === 'materia_prima') {
-            dataToSend.unit_price = null;
-            dataToSend.unit_weight = null;
-            dataToSend.kg_weight = null; // Or keep if it has meaning? Null for now.
-            dataToSend.recipe_id = null; // Materia prima cannot have recipe_id
-        } else if (dataToSend.unit === 'Kg') {
-            dataToSend.unit_price = null;
-            dataToSend.unit_weight = null;
-        } else if (dataToSend.unit === 'UN') {
-             dataToSend.kg_weight = null; // Assuming kg_weight irrelevant if sold by unit
-        }
-
-        console.log('[ProductForm] Dados finais enviados para onSubmit:', dataToSend);
-
-        try {
-            await onSubmit(dataToSend); // Call parent onSubmit
-            
-            // Verificar se o componente ainda está montado antes de atualizar o estado
-            if (!isMounted.current) {
-              console.log('[ProductForm] Produto salvo, mas componente já desmontado');
-              return;
-            }
-            
-            safeSetState(setSuccessMsg, `Produto ${isEditMode ? 'atualizado' : 'cadastrado'} com sucesso!`);
-            toast.success(`Produto ${isEditMode ? 'atualizado' : 'cadastrado'}!`);
-             // Optional: Clear form on successful creation? Or let parent handle navigation/reset?
-             // if (!isEditMode) { safeSetState(setFormData, getDefaultFormData()); safeSetState(setPesoComprado, ''); safeSetState(setValorPago, ''); }
-             if (!isEditMode && navigate) { // Navigate back after successful create?
-                 // navigate('/products'); // Example
-             }
-        } catch (err: any) {
-            console.error('Erro ao salvar produto via onSubmit:', err);
-            const backendError = err?.message || err?.error_description || 'Ocorreu um erro desconhecido.';
-            
-            // Verificar se o componente ainda está montado antes de atualizar o estado
-            if (!isMounted.current) {
-              console.log('[ProductForm] Erro ao salvar, mas componente já desmontado');
-              return;
-            }
-            
-            safeSetState(setErrorMsg, `Erro ao salvar: ${backendError}`);
-            toast.error(`Erro ao salvar: ${backendError}`);
-        }
   };
 
-  // Handler de Submissão - Definido uma vez
+  // Handler para submit do formulário
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Verificar se o componente ainda está montado
-    if (!isMounted.current) {
-      console.log('[ProductForm] Tentativa de submissão após desmontagem');
-      return;
-    }
     
     safeSetState(setErrorMsg, null);
     safeSetState(setSuccessMsg, null);
@@ -737,208 +765,143 @@ const ProductForm: React.FC<ProductFormProps> = ({
       return;
     }
 
-    // Final name check only if name field is editable
-    if (!isFieldDisabled('name')) {
-        const { similars: finalSimilars, exact: finalExact } = await checkSimilarNamesAndExact(formData.name);
-        if (finalExact) {
-            safeSetState(setHasExactName, true);
-            safeSetState(setErrorMsg, 'Já existe um produto cadastrado com este nome.');
-            safeSetState(setErrors, prev => ({...prev, name: 'Já existe um produto com este nome.'}));
-            toast.error('Nome de produto duplicado.');
-            return;
-        }
-        if (finalSimilars.length > 0 && !pendingSubmit && !showSimilarAlert) { // Avoid re-prompting if alert already shown
-             safeSetState(setSimilarNames, finalSimilars);
-             safeSetState(setShowSimilarAlert, true);
-             safeSetState(setErrorMsg, 'Existem produtos com nomes parecidos. Confirme o cadastro.');
-             toast.warning('Produtos com nomes similares encontrados.');
-             // Define the pending action
-             safeSetState(setPendingSubmit, () => () => executeSubmit(activeCompany.id));
-             return; // Wait for user confirmation
-        }
-    }
+    // Verificação de nomes duplicados removida para permitir cadastro mais flexível
 
-    // Execute submission if no similar name alert is active/pending
-    if (!showSimilarAlert) {
-         await executeSubmit(activeCompany.id);
-    }
+    // Executa a submissão diretamente sem verificar nomes similares
+    await executeSubmit(activeCompany.id);
+  }, [formData, errors, validateForm, activeCompany, isFieldDisabled, pesoComprado, valorPago, custoCalculado]);
 
-  }, [formData, errors, validateForm, checkSimilarNamesAndExact, activeCompany, pendingSubmit, showSimilarAlert, isFieldDisabled, pesoComprado, valorPago, custoCalculado]); // Updated dependencies
-
-  // Confirmação/Cancelamento de nomes similares
-  const handleConfirmSimilar = useCallback(async () => {
-    if (pendingSubmit) {
-      await pendingSubmit(); // Execute the pending submit action
-    }
-  }, [pendingSubmit]);
-
-  const handleCancelSimilar = useCallback(() => {
-    safeSetState(setShowSimilarAlert, false);
-    safeSetState(setPendingSubmit, null);
-    safeSetState(setErrorMsg, null);
-  }, []);
-
-  // Handlers para dias da semana
-  const handleWeekdayChange = useCallback((dayKey: keyof ProductFormData, checked: boolean | string) => {
-      if (isFieldDisabled(dayKey)) return; // Should not happen based on isFieldDisabled logic, but safe check
-      const isChecked = toBoolean(checked);
-      const newState = { ...formData, [dayKey]: isChecked };
-      const allIndividualDaysChecked = weekdays.every(day => toBoolean(newState[day.key]));
-      newState.all_days = allIndividualDaysChecked;
-      safeSetState(setFormData, newState);
-       if (errors.monday) { // Assuming 'monday' holds the generic day error
-             safeSetState(setErrors, prev => { delete prev.monday; return {...prev}; });
-       }
-  }, [formData, errors, isFieldDisabled]); // Added isFieldDisabled dependency
-
-  const handleAllDaysChange = useCallback((checked: boolean | string) => {
-       if (isFieldDisabled('all_days')) return; // Safe check
-       const isChecked = toBoolean(checked);
-       safeSetState(setFormData, prev => ({
-         ...prev,
-         all_days: isChecked,
-         monday: isChecked,
-         tuesday: isChecked,
-         wednesday: isChecked,
-         thursday: isChecked,
-         friday: isChecked,
-         saturday: isChecked,
-         sunday: isChecked,
-       }));
-        if (errors.monday) {
-             safeSetState(setErrors, prev => { delete prev.monday; return {...prev}; });
-        }
-  }, [errors, isFieldDisabled]); // Added isFieldDisabled dependency
-
-  const allWeekdaysChecked = weekdays.every(day => toBoolean(formData[day.key]));
-  const isSubgroupDisabled = isFieldDisabled('subgroup_id') || !formData.group_id;
-
-  // ----- JSX - Retornado uma vez -----
-  // Note: The JSX needs significant updates based on the revised isFieldDisabled logic
-  // and potentially removing fields if decided.
-  // For now, assuming JSX structure remains similar but respecting `disabled` prop correctly.
+// ----- JSX do componente -----
   return (
-    <form onSubmit={handleSubmit} className="space-y-6 animate-fade-in">
-      <Card>
-        <CardHeader>
-          <CardTitle>{isEditMode ? 'Editar Produto' : 'Adicionar Novo Produto'}</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Feedback Messages */}
-          {errorMsg && <p className="text-red-600 text-sm p-3 bg-red-50 border border-red-200 rounded-md">{errorMsg}</p>}
-          {successMsg && <p className="text-green-600 text-sm p-3 bg-green-50 border border-green-200 rounded-md">{successMsg}</p>}
+    <div className="relative">
+      <form onSubmit={handleSubmit}>
+        <Card className="w-full max-w-4xl mx-auto mb-20"> {/* Margem inferior para espaço dos botões fixos */}
+        
+          {/* Conteúdo com altura limitada e scroll */}
+          <div className="max-h-[calc(100vh-200px)] overflow-y-auto p-6 pt-4">
+            {/* Feedback Messages */}
+            {errorMsg && <p className="text-red-600 text-sm p-3 mb-3 bg-red-50 border border-red-200 rounded-md">{errorMsg}</p>}
+            {successMsg && <p className="text-green-600 text-sm p-3 mb-3 bg-green-50 border border-green-200 rounded-md">{successMsg}</p>}
 
-          {/* Similar Name Alert */}
-          {showSimilarAlert && similarNames.length > 0 && (
-             <div className="p-4 bg-yellow-100 border border-yellow-300 rounded-md text-sm text-yellow-800">
-               <p><strong>Atenção:</strong> Produtos com nomes parecidos encontrados:</p>
-               <ul className="list-disc list-inside ml-4">
-                 {similarNames.map((name, idx) => <li key={idx}>{name}</li>)}
-               </ul>
-               <p className="mt-2">Deseja cadastrar este produto mesmo assim?</p>
-               <div className="mt-2 space-x-2">
-                 <Button size="sm" variant="outline" onClick={handleConfirmSimilar} disabled={isLoading}>Sim, cadastrar</Button>
-                 <Button size="sm" variant="destructive" onClick={handleCancelSimilar} disabled={isLoading}>Não, cancelar</Button>
-               </div>
-             </div>
-           )}
+            {/* Campos básicos do produto - Nome, SKU e Tipo na mesma linha */}
+            <div className="flex flex-wrap items-end gap-3 mb-4">
+              {/* Nome do Produto - ocupa a maior parte do espaço disponível */}
+              <div className="grow">
+                <Label htmlFor="name">Nome do Produto *</Label>
+                <Input
+                  id="name"
+                  placeholder="Nome do produto"
+                  value={formData.name}
+                  onChange={(e) => handleInputChange('name', e.target.value)}
+                  disabled={isLoading}
+                />
+                {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name}</p>}
+              </div>
 
-          {/* --- Form Fields --- */}
-          {/* Row 1: Name, Type */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Coluna 1: Nome */}
-            <div>
-              <Label htmlFor="name">Nome do Produto *</Label>
-              <Input
-                id="name" name="name" value={formData.name} onChange={handleChange} onBlur={handleNameBlur}
-                className={errors.name ? 'border-red-500' : ''}
-                disabled={isFieldDisabled('name') || isLoading}
-                style={isFieldDisabled('name') ? disabledFieldStyle : undefined}
-                maxLength={100}
-              />
-              {isFieldDisabled('name') && disabledFieldMessage}
-              {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name}</p>}
-            </div>
+              {/* SKU (Código do Produto) - largura fixa para 6 dígitos */}
+              <div className="w-[100px] shrink-0">
+                <Label htmlFor="sku" className={errors.sku ? 'text-red-500' : ''}>SKU</Label>
+                <Input
+                  id="sku"
+                  placeholder="Código"
+                  value={formData.sku || ''}
+                  onChange={(e) => handleInputChange('sku', e.target.value)}
+                  className={errors.sku ? 'border-red-500' : ''}
+                  disabled={isLoading || isFieldDisabled('sku')}
+                  style={isFieldDisabled('sku') ? disabledFieldStyle : undefined}
+                />
+                {errors.sku && <p className="text-red-500 text-xs mt-1">{errors.sku}</p>}
+              </div>
 
-            {/* Coluna 2: Tipo */}
-            <div>
-               <Label htmlFor="product_type">Tipo *</Label>
-               {!isProductTypeForced ? (
+              {/* Tipo de Produto - largura fixa baseada no nome "Material de limpeza" */}
+              <div className="w-[180px] shrink-0">
+                <Label htmlFor="product_type_id">Tipo de Produto *</Label>
                 <select
-                  id="product_type"
-                  className={`w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background ${errors.product_type ? 'border-red-500' : ''}`}
-                  style={isFieldDisabled('product_type') ? disabledFieldStyle : undefined}
-                  value={formData.product_type ?? ''}
-                  onChange={(e) => handleSelectChange('product_type', e.target.value as ProductType | null)}
-                  disabled={isFieldDisabled('product_type') || isEditMode || isLoading}
+                  id="product_type_id"
+                  name="product_type_id"
+                  value={formData.product_type_id || ''}
+                  onChange={(e) => handleSelectChange('product_type_id', e.target.value)}
+                  disabled={isFieldDisabled('product_type_id') || isLoading || isProductTypeForced || hasSystemProductType}
+                  className={`flex h-10 w-full rounded-md border bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${errors.product_type_id ? 'border-red-500' : 'border-input'}`}
+                  style={isFieldDisabled('product_type_id') || isProductTypeForced || hasSystemProductType ? disabledFieldStyle : undefined}
                 >
                   <option value="">Selecione o tipo</option>
-                  <option value="materia_prima">Matéria-prima</option>
-                  <option value="subreceita">Sub-receita</option>
-                  <option value="receita">Receita</option>
-                </select>
-               ) : (
-                 <>
-                   <Input value={forceProductType === 'materia_prima' ? 'Matéria-prima' : forceProductType === 'subreceita' ? 'Sub-receita' : 'Receita'} disabled readOnly />
-                   <p className="text-xs text-gray-500 mt-1">Tipo fixo neste fluxo</p>
-                 </>
-               )}
-               {isFieldDisabled('product_type') && disabledFieldMessage}
-               {isEditMode && !isFieldDisabled('product_type') && <p className="text-xs text-gray-500 mt-1">O tipo não pode ser alterado após cadastro.</p>}
-               {errors.product_type && <p className="text-red-500 text-xs mt-1">{errors.product_type}</p>}
-            </div>
+                  {productTypes.map((type) => {
+                    const isSystemType = SYSTEM_PRODUCT_TYPES.includes(type.name.toLowerCase());
+                    // Adicionar aviso visual para tipos do sistema
+                    return (
+                      <option 
+                    key={type.id} 
+                    value={type.id}
+                    className={isSystemType ? 'font-semibold' : ''}
+                  >
+                    {isSystemType ? `${type.name} (Sistema)` : type.name}
+                  </option>
+                );
+              })}
+            </select>
+            {(isFieldDisabled('product_type_id') || isProductTypeForced || hasSystemProductType) && 
+              <p className="text-xs text-gray-500 mt-1">
+                {hasSystemProductType ? 'Tipo do sistema (protegido)' : 
+                 isProductTypeForced ? 'Tipo fixo para esta operação' : 'Não editável'}
+              </p>
+            }
+            {errors.product_type_id && <p className="text-red-500 text-xs mt-1">{errors.product_type_id}</p>}
           </div>
-            {/* MATÉRIA PRIMA: Mostrar apenas os campos específicos */}
-            {formData.product_type === 'materia_prima' && (
+          </div>
+            {/* CAMPOS DE MATÉRIA PRIMA - SEMPRE VISÍVEIS */}
               <>
                 {/* Custo da Matéria Prima */}
                 {!isRecipeProduct && (
-                  <Card className="bg-gray-50 p-4 mt-4">
-                    <CardHeader className="p-0 pb-3">
-                      <CardTitle className="text-base font-medium">Custo da Matéria Prima (por Kg)</CardTitle>
-                    </CardHeader>
-                    <CardContent className="p-0">
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
+                  <Card className="bg-gray-50 p-3 mt-3">
+                    <div className="mb-2">
+                      <h4 className="text-sm font-medium text-gray-700">Custo da Matéria Prima (por Kg)</h4>
+                    </div>
+                    <div>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
                         <div>
                           <Label htmlFor="pesoComprado" className="mb-2 block">Peso Comprado (Kg) *</Label>
-                          <Input 
+                          <input 
                             id="pesoComprado" 
                             name="pesoComprado" 
                             type="text" 
-                            inputMode='decimal' 
-                            value={pesoComprado} 
-                            onChange={(e) => safeSetState(setPesoComprado, e.target.value)} 
+                            defaultValue={pesoComprado} 
+                            onInput={(e) => {
+                              const newValue = e.currentTarget.value;
+                              console.log('[PesoComprado] Valor digitado:', newValue);
+                              setPesoComprado(newValue);
+                            }}
                             placeholder='Ex: 10,5' 
                             disabled={isLoading} 
-                            className={`h-10 ${errors.cost ? 'border-red-500' : ''}`} 
+                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50" 
                           />
                         </div>
                         <div>
                           <Label htmlFor="valorPago" className="mb-2 block">Valor Pago (R$) *</Label>
-                          <Input 
+                          <input 
                             id="valorPago" 
                             name="valorPago" 
                             type="text" 
-                            inputMode='decimal' 
-                            value={valorPago} 
-                            onChange={(e) => safeSetState(setValorPago, e.target.value)} 
+                            defaultValue={valorPago} 
+                            onInput={(e) => {
+                              const newValue = e.currentTarget.value;
+                              console.log('[ValorPago] Valor digitado:', newValue);
+                              setValorPago(newValue);
+                            }}
                             placeholder='Ex: 50,00' 
                             disabled={isLoading} 
-                            className={`h-10 ${errors.cost ? 'border-red-500' : ''}`} 
+                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50" 
                           />
                         </div>
                         <div>
                           <Label className="mb-2 block">Custo Calculado (R$/Kg)</Label>
-                          <Input 
-                            value={custoCalculado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} 
-                            readOnly 
-                            disabled 
-                            className='bg-gray-200 font-semibold h-10' 
-                          />
+                          <div className="flex h-10 w-full rounded-md border border-input bg-gray-200 px-3 py-2 text-sm font-semibold items-center">
+                            R$ {custoCalculado > 0 ? custoCalculado.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).replace('.', ',') : '0,00'}
+                          </div>
                           {errors.cost && <p className="text-red-500 text-xs mt-1">{errors.cost}</p>}
                         </div>
                       </div>
-                    </CardContent>
+                    </div>
                   </Card>
                 )}
 
@@ -968,10 +931,10 @@ const ProductForm: React.FC<ProductFormProps> = ({
                     <select
                       id="subgroup_id"
                       className={`w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background ${errors.subgroup_id ? 'border-red-500' : ''}`}
-                      style={isSubgroupDisabled ? disabledFieldStyle : undefined}
+                      style={isFieldDisabled('subgroup_id') ? disabledFieldStyle : undefined}
                       value={formData.subgroup_id ?? ''}
                       onChange={(e) => handleSelectChange('subgroup_id', e.target.value)}
-                      disabled={isSubgroupDisabled || isLoading}
+                      disabled={isFieldDisabled('subgroup_id') || isLoading}
                     >
                       <option value="">{!formData.group_id ? "Selecione um grupo" : "Selecione o subgrupo"}</option>
                       <option value="none">Nenhum</option>
@@ -984,24 +947,9 @@ const ProductForm: React.FC<ProductFormProps> = ({
                   </div>
                 </div>
 
-                {/* Produto Ativo para Matéria Prima */}
-                <div className="flex items-center space-x-2 mt-4">
-                  <Checkbox 
-                    id="ativo" 
-                    name="ativo" 
-                    checked={formData.ativo} 
-                    onCheckedChange={(checked) => handleSelectChange('ativo', checked ? 'true' : 'false')} 
-                    disabled={isFieldDisabled('ativo') || isLoading} 
-                    style={isFieldDisabled('ativo') ? disabledFieldStyle : undefined}
-                    className={formData.ativo ? 'bg-amber-500 text-white border-amber-500 hover:bg-amber-600 hover:text-white' : 'bg-white text-gray-500 border-gray-300'}
-                  />
-                  <Label htmlFor="ativo" className={formData.ativo ? 'text-amber-700 font-medium' : 'text-gray-500'}>Produto Ativo?</Label>
-                </div>
+                {/* Checkbox de Produto Ativo movido para a seção geral do formulário */}
               </>
-            )}
-
-            {/* SUBRECEITA E RECEITA: Mostrar apenas dias de produção e produto ativo */}
-            {(formData.product_type === 'subreceita' || formData.product_type === 'receita') && (
+            {/* CAMPOS DE RECEITA E SUB-RECEITA - SEMPRE VISÍVEIS */}
               <div className="space-y-4">
                 {/* Dias de Produção */}
                 <div className="space-y-2 pt-4">
@@ -1030,7 +978,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
                             <Checkbox 
                               id={day.key} 
                               checked={isChecked} 
-                              onCheckedChange={(checked) => handleWeekdayChange(day.key, checked as boolean)} 
+                              onCheckedChange={(checked) => handleWeekdayChange(day.key as WeekdayKey, checked as boolean)} 
                               disabled={isLoading}
                               className={isChecked ? 'bg-amber-500 text-white border-amber-500 hover:bg-amber-600 hover:text-white' : 'bg-white text-gray-500 border-gray-300'}
                             />
@@ -1086,27 +1034,31 @@ const ProductForm: React.FC<ProductFormProps> = ({
                   <Label htmlFor="ativo" className={formData.ativo ? 'text-amber-700 font-medium' : 'text-gray-500'}>Produto Ativo?</Label>
                 </div>
               </div>
-            )}
-
-          {/* Espaço reservado para manter a estrutura do formulário */}
-
-          {/* Action Buttons */}
-          <div className="flex justify-end space-x-2 pt-6">
-            <Button type="button" variant="outline" onClick={onCancel} disabled={isLoading}>
-              Cancelar
-            </Button>
-            <Button 
-              type="submit" 
-              disabled={isLoading || showSimilarAlert}
-              className={`${isLoading ? 'bg-gray-500 cursor-not-allowed' : ''}`}
-            >
-              {isEditMode ? 'Salvar Alterações' : 'Cadastrar Produto'}
-              {isLoading ? ' ...' : ''}
-            </Button>
+            {/* Fim do conteúdo principal */}
           </div>
-        </CardContent>
-      </Card>
-    </form>
+        </Card>
+        
+        {/* Botões de ação fixos na parte inferior */}
+        <div className="fixed bottom-0 left-0 right-0 py-4 px-6 bg-white border-t border-gray-200 dark:bg-gray-950 dark:border-gray-800 shadow-md flex justify-end space-x-2 z-50">
+          <Button 
+            type="button" 
+            variant="outline" 
+            onClick={onCancel} 
+            disabled={isLoading}
+          >
+            Cancelar
+          </Button>
+          <Button 
+            type="submit" 
+            disabled={isLoading}
+            className={`${isLoading ? 'bg-gray-500 cursor-not-allowed' : ''}`}
+          >
+            {isEditMode ? 'Salvar Alterações' : 'Cadastrar Produto'}
+            {isLoading ? ' ...' : ''}
+          </Button>
+        </div>
+      </form>
+    </div>
   );
 };
 

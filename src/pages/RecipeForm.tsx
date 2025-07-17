@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { v4 as uuidv4 } from "uuid";
 import { useLocation } from "react-router-dom";
 import { parseDecimalBR } from "@/lib/numberUtils";
 import { useNavigate, useParams } from "react-router-dom";
@@ -48,7 +49,8 @@ import {
   getProducts, 
   Product, 
   createProduct, 
-  ProductType 
+  ProductType,
+  searchProductsByTerm
 } from "@/services/productService";
 import { 
   getRecipes, 
@@ -59,6 +61,7 @@ import {
   RecipeIngredient, 
   checkRecipeNameExists // Adicionar importação
 } from "@/services/recipeService";
+import { getSystemProductTypeId, determineRecipeProductType } from "@/services/recipeTypeHelper";
 import { getGroups, getSubgroups, Group, Subgroup } from "@/services/groupService";
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -109,6 +112,7 @@ export default function RecipeForm() {
   // Estados de carregamento
   const [loading, setLoading] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
+  const [productSearchResults, setProductSearchResults] = useState<Product[]>([]);
   const [subRecipes, setSubRecipes] = useState<Recipe[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [subgroups, setSubgroups] = useState<Subgroup[]>([]);
@@ -139,8 +143,9 @@ export default function RecipeForm() {
     subgroup_id: ''
   });
 
-  // Ref para controlar se o componente está montado
+  // Refs para controle do componente
   const isMounted = useRef(true);
+  const searchDebounceRef = useRef<NodeJS.Timeout | null>(null);
   
   // Efeito para limpar recursos ao desmontar
   useEffect(() => {
@@ -334,54 +339,45 @@ export default function RecipeForm() {
   
   // Carregar dados iniciais (produtos, grupos, subgrupos e receitas)
   useEffect(() => {
-    const fetchData = async () => {
-      if (activeCompany?.id) {
-        setLoading(true);
-        try {
-          const [productsData, recipesData, groupsData, subgroupsData] = await Promise.all([
-            getProducts(activeCompany.id),
-            getRecipes(activeCompany.id),
-            getGroups(activeCompany.id),
-            getSubgroups(activeCompany.id)
-          ]);
-          
-          if (isMounted.current) {
-            setProducts(productsData);
-            setExistingRecipes(recipesData);
-            setGroups(groupsData);
-            setSubgroups(subgroupsData);
-            
-            // Carregar sub-receitas (receitas que podem ser usadas como ingredientes)
-            // Verificar se is_sub_recipe existe ou usar uma propriedade alternativa
-            const subRecipesData = recipesData.filter(r => {
-              // Log para depuração
-              console.log('[RecipeForm] Verificando receita para filtrar como subreceita:', {
-                id: r.id,
-                name: r.name,
-                // Usar acesso seguro com operador opcional
-                is_sub_recipe: (r as any).is_sub_recipe,
-                code: (r as any).code
-              });
-              
-              // Considerar uma receita como subreceita se qualquer uma das condições for verdadeira
-              return (r as any).is_sub_recipe === true || ((r as any).code && (r as any).code.startsWith('SUB'));
-            });
-            
-            console.log('[RecipeForm] SubReceitas carregadas:', subRecipesData.length);
-            setSubRecipes(subRecipesData);
-          }
-        } catch (error) {
-          console.error("Erro ao carregar dados:", error);
-          toast.error("Erro ao carregar dados. Por favor, tente novamente.");
-        } finally {
-          if (isMounted.current) {
-            setLoading(false);
-          }
+    if (!isMounted.current || !activeCompany?.id) return;
+    
+    const loadInitialData = async () => {
+      setLoading(true);
+      try {
+        // Verificar os IDs dos tipos de sistema para receitas e subreceitas
+        const receitaTypeId = await getSystemProductTypeId('receita', activeCompany.id);
+        const subreceitaTypeId = await getSystemProductTypeId('subreceita', activeCompany.id);
+        console.log("IDs dos tipos de sistema obtidos:", { receitaTypeId, subreceitaTypeId });
+        
+        // Carregar produtos
+        const productsList = await getProducts(activeCompany.id);
+        setProducts(productsList);
+        
+        // Carregar sub-receitas (receitas marcadas como sub-produtos)
+        const recipesList = await getRecipes(activeCompany.id);
+        setExistingRecipes(recipesList);
+        
+        const subRecipesList = recipesList.filter(r => r.code && r.code.startsWith('SUB'));
+        setSubRecipes(subRecipesList);
+        
+        // Carregar grupos e subgrupos
+        const groupsList = await getGroups(activeCompany.id);
+        setGroups(groupsList);
+        
+        const subgroupsList = await getSubgroups(activeCompany.id);
+        setSubgroups(subgroupsList);
+        
+      } catch (error) {
+        console.error("Erro ao carregar dados iniciais:", error);
+        toast.error("Erro ao carregar dados necessários. Por favor, recarregue a página.");
+      } finally {
+        if (isMounted.current) {
+          setLoading(false);
         }
       }
     };
     
-    fetchData();
+    loadInitialData();
   }, [activeCompany?.id]);
   
   // Estado para os arquivos de mídia
@@ -718,17 +714,21 @@ export default function RecipeForm() {
     setIngredients([...ingredients, ingredientToAdd]);
     
     // Reset ingredient form but keep isSubRecipe state
-    setNewIngredient({
-      productId: null,
-      productName: '',
-      isSubRecipe: newIngredient.isSubRecipe,
-      subRecipeId: null,
-      quantity: '',
-      unit: 'kg',
-      cost: 0,
-      totalCost: 0,
-      etapa: null
-    });
+    const resetNewIngredient = () => {
+      setNewIngredient({
+        id: uuidv4(),
+        etapa: '',
+        isSubRecipe: newIngredient.isSubRecipe,
+        productId: null,
+        subRecipeId: null,
+        productName: '',
+        quantity: '',
+        unit: ''
+      });
+      // Limpar resultados de busca anteriores
+      setProductSearchResults([]);
+    };
+    resetNewIngredient();
   };
   
   const removeIngredient = (id: string) => {
@@ -1287,70 +1287,129 @@ export default function RecipeForm() {
                             placeholder="Digite para buscar uma matéria prima"
                             value={newIngredient.productName || ''}
                             onChange={(e) => {
+                              const searchTerm = e.target.value;
                               setNewIngredient(prev => ({
                                 ...prev,
-                                productName: e.target.value,
+                                productName: searchTerm,
                                 productId: null // Limpar o ID quando o usuário está digitando
                               }));
+                              
+                              // Buscar produtos diretamente do banco de dados enquanto digita
+                              if (searchTerm.trim() !== '' && activeCompany?.id) {
+                                setLoading(true); // Mostrar indicador de carregamento
+                                // Usar um timeout para implementar debounce
+                                if (searchDebounceRef.current) {
+                                  clearTimeout(searchDebounceRef.current);
+                                }
+                                
+                                // Implementar debounce (300ms)
+                                searchDebounceRef.current = setTimeout(() => {
+                                  console.log('[RecipeForm] Buscando matérias-primas com termo:', searchTerm);
+                                  
+                                  // Tentar buscar com diferentes variações do termo para garantir resultados
+                                  searchProductsByTerm(activeCompany.id, searchTerm, 'materia')
+                                    .then(results => {
+                                      console.log('[RecipeForm] Resultados da busca:', results.length);
+                                      if (isMounted.current) {
+                                        // Atualizar a lista local com os resultados da busca
+                                        setProductSearchResults(results);
+                                      }
+                                    })
+                                    .catch(error => {
+                                      console.error('Erro ao buscar produtos:', error);
+                                    })
+                                    .finally(() => {
+                                      if (isMounted.current) {
+                                        setLoading(false);
+                                      }
+                                    });
+                                }, 300); // Aguardar 300ms antes de fazer a busca
+                              } else {
+                                // Limpar resultados se o campo estiver vazio
+                                setProductSearchResults([]);
+                              }
                             }}
                           />
-                          {/* Mostrar o dropdown apenas quando o usuário digitar algo */}
+                          {/* Mostrar o dropdown quando o usuário digitar algo */}
                           {!newIngredient.isSubRecipe && newIngredient.productName && !newIngredient.productId && (
                             <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-auto">
-                              {(() => {
-                                // Adicionar logs para depuração
-                                console.log('[RecipeForm] Filtrando matérias primas:', {
-                                  productsCount: products.length,
-                                  searchTerm: newIngredient.productName,
-                                  materiasPrimasCount: products.filter(p => p.product_type === 'materia_prima').length
-                                });
-                                
-                                // Ajustar o filtro para ser mais permissivo
-                                const materiasPrimas = products.filter(p => {
-                                  // Primeiro filtrar pelo tipo
-                                  if (p.product_type !== 'materia_prima') {
-                                    return false;
+                              {loading ? (
+                                <div className="px-4 py-2 text-center text-gray-500">Buscando produtos...</div>
+                              ) : (
+                                (() => {
+                                  console.log('[RecipeForm] Resultados da busca:', productSearchResults);
+                                  console.log('[RecipeForm] Produtos disponíveis:', products.length);
+                                  console.log('[RecipeForm] Estrutura dos produtos:');
+                                  products.forEach((p, index) => {
+                                    console.log(`Produto ${index + 1}:`, {
+                                      id: p.id,
+                                      name: p.name,
+                                      product_type: p.product_type,
+                                      raw_type: p.raw_type,
+                                      product_type_id: p.product_type_id,
+                                      product_types: p.product_types
+                                    });
+                                  });
+                                  
+                                  // Usar os resultados da busca do banco de dados ou filtrar a lista local
+                                  // Primeiro verificar resultados da API, depois fazer filtragem local
+                                  let materiasPrimas = [];
+                                  
+                                  if (productSearchResults.length > 0) {
+                                    // Usar resultados da busca no banco
+                                    materiasPrimas = productSearchResults;
+                                    console.log('[RecipeForm] Usando resultados da API:', materiasPrimas.length);
+                                  } else {
+                                    // Filtrar localmente todos os produtos do tipo materia_prima
+                                    materiasPrimas = products.filter(p => {
+                                      // Verificar tanto pelo campo product_type quanto pelo raw_type
+                                      const isMateriaPrima = 
+                                        (p.product_type === 'materia_prima' || 
+                                         p.raw_type?.includes('materia') || 
+                                         (p.product_types?.name && p.product_types.name.includes('materia')));
+                                        
+                                      if (!isMateriaPrima) {
+                                        return false;
+                                      }
+                                      
+                                      // Só filtrar pelo nome se o usuário digitou algo
+                                      return !newIngredient.productName || 
+                                        (p.name && p.name.toLowerCase().includes(newIngredient.productName.toLowerCase()));
+                                    });
+                                    console.log('[RecipeForm] Usando filtragem local:', materiasPrimas.length);
                                   }
                                   
-                                  // Se o campo de busca estiver vazio, mostrar todas as matérias primas
-                                  if (!newIngredient.productName || newIngredient.productName.trim() === '') {
-                                    return true;
-                                  }
+                                  console.log('[RecipeForm] Matérias primas encontradas:', materiasPrimas.length);
                                   
-                                  // Caso contrário, filtrar pelo nome
-                                  return p.name && p.name.toLowerCase().includes(newIngredient.productName.toLowerCase());
-                                });
-                                
-                                console.log('[RecipeForm] Matérias primas filtradas:', materiasPrimas.length);
-                                
-                                if (materiasPrimas.length > 0) {
-                                  return materiasPrimas.map(product => (
-                                    <div
-                                      key={product.id}
-                                      className="px-4 py-2 cursor-pointer hover:bg-gray-100 flex justify-between items-center"
-                                      onClick={() => {
-                                        handleProductSelect(product.id);
-                                        setNewIngredient(prev => ({
-                                          ...prev,
-                                          productName: product.name,
-                                          productId: product.id
-                                        }));
-                                      }}
-                                    >
-                                      <span>{product.name} ({product.unit})</span>
-                                      <span className="text-gray-500">
-                                        {product.cost ? product.cost.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : ''}
-                                      </span>
-                                    </div>
-                                  ));
-                                } else {
-                                  return (
-                                    <div className="px-4 py-2 text-gray-500">
-                                      Nenhuma matéria prima encontrada
-                                    </div>
-                                  );
-                                }
-                              })()}
+                                  if (materiasPrimas.length > 0) {
+                                    return materiasPrimas.map(product => (
+                                      <div
+                                        key={product.id}
+                                        className="px-4 py-2 cursor-pointer hover:bg-gray-100 flex justify-between items-center"
+                                        onClick={() => {
+                                          handleProductSelect(product.id);
+                                          setNewIngredient(prev => ({
+                                            ...prev,
+                                            productName: product.name,
+                                            productId: product.id
+                                          }));
+                                        }}
+                                      >
+                                        <span>{product.name} ({product.unit})</span>
+                                        <span className="text-gray-500">
+                                          {product.cost ? product.cost.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : ''}
+                                        </span>
+                                      </div>
+                                    ));
+                                  } else {
+                                    return (
+                                      <div className="px-4 py-2 text-gray-500">
+                                        Nenhuma matéria-prima encontrada
+                                      </div>
+                                    );
+                                  }
+                                })()
+                              )}
                             </div>
                           )}
                         </div>

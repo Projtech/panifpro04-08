@@ -5,7 +5,7 @@ import { Pencil, Trash2 } from 'lucide-react';
 
 interface SetorTableViewProps {
   setores: Setor[];
-  onEditSetor: (setor: Setor) => void;
+  onEditSetor: (setorId: string) => void;
   onDeleteSetor: (id: string) => void;
 }
 
@@ -48,7 +48,7 @@ const SetorTableView: React.FC<SetorTableViewProps> = ({
                   <Button
                     variant="ghost"
                     size="icon"
-                    onClick={() => onEditSetor(setor)}
+                    onClick={() => onEditSetor(setor.id)}
                   >
                     <Pencil className="h-4 w-4" />
                   </Button>

@@ -9,6 +9,7 @@ export interface Setor {
   company_id: string;
   created_at?: string;
   updated_at?: string;
+  ativo: boolean; // Alterado para obrigatório já que todos os registros devem ter esse campo
 }
 
 export interface SetorForm {
@@ -17,6 +18,21 @@ export interface SetorForm {
   description: string | null;
   color: string | null;
   company_id: string;
+  ativo: boolean;
+}
+
+/**
+ * Interface para operações de atualização de setores
+ */
+export interface SetorUpdateData {
+  id?: string;
+  name?: string;
+  description?: string | null;
+  color?: string | null;
+  company_id?: string;
+  created_at?: string;
+  updated_at?: string;
+  ativo?: boolean;
 }
 
 /**
@@ -31,18 +47,30 @@ export async function getSetores(companyId: string): Promise<Setor[]> {
   }
   
   try {
-    const { data, error } = await supabase
+    // Agora buscamos apenas setores ativos diretamente na consulta
+    const { data: setores, error } = await supabase
       .from('setores')
       .select('*')
       .eq('company_id', companyId)
+      .eq('ativo', true)
       .order('name');
     
-    if (error) throw error;
+    if (error) {
+      console.error("[SETORES] Error fetching setores:", error);
+      return [];
+    }
     
-    return data || [];
+    if (!setores) return [];
+    
+    // Garantimos que todos os registros têm o campo ativo
+    return setores.map(setor => ({
+      ...setor,
+      ativo: setor.ativo ?? true
+    }));
   } catch (error) {
     console.error("[SETORES] Error fetching setores:", error);
-    toast.error("Erro ao carregar setores");
+    // Não exibimos toast de erro para o usuário quando não há setores
+    // para evitar confusão
     return [];
   }
 }
@@ -62,16 +90,23 @@ export async function getSetor(id: string, companyId: string): Promise<Setor | n
       .select('*')
       .eq('id', id)
       .eq('company_id', companyId)
+      .eq('ativo', true) // Verifica se o setor está ativo
       .single();
     
     if (error) {
       if (error.code === 'PGRST116') {
-        return null; // Registro não encontrado
+        return null; // Registro não encontrado ou inativo
       }
       throw error;
     }
     
-    return data;
+    if (!data) return null;
+    
+    // Garantimos que o setor tem o campo ativo
+    return {
+      ...data,
+      ativo: data.ativo ?? true
+    };
   } catch (error) {
     console.error("[SETORES] Error fetching setor:", error);
     toast.error("Erro ao carregar setor");
@@ -125,32 +160,38 @@ export async function createSetor(
   setorData: Omit<SetorForm, 'id'>, 
   companyId: string
 ): Promise<Setor | null> {
-  if (!companyId) {
-    toast.error("Empresa não selecionada");
-    return null;
-  }
-  
+  if (!setorData || !companyId) return null;
+
   try {
-    // Verificar se já existe um setor com o mesmo nome
+    // Verificar duplicidade de nome
     const exists = await checkSetorNameExists(setorData.name, companyId);
     if (exists) {
-      toast.error(`Já existe um setor com o nome "${setorData.name}"`);
+      toast.error("Já existe um setor com esse nome");
       return null;
     }
-    
+
+    const dataToInsert = {
+      ...setorData,
+      company_id: companyId,
+      ativo: true, // Garantir que novos setores sejam criados como ativos
+    };
+
     const { data, error } = await supabase
       .from('setores')
-      .insert({
-        ...setorData,
-        company_id: companyId
-      })
-      .select()
-      .single();
-    
+      .insert([dataToInsert])
+      .select();
+
     if (error) throw error;
-    
+
     toast.success(`Setor "${setorData.name}" criado com sucesso`);
-    return data;
+    
+    // Garantir que o campo ativo esteja presente
+    if (!data || data.length === 0) return null;
+    
+    return data.map(setor => ({
+      ...setor,
+      ativo: setor.ativo ?? true
+    }))[0];
   } catch (error) {
     console.error("[SETORES] Error creating setor:", error);
     toast.error("Erro ao criar setor");
@@ -193,13 +234,19 @@ export async function updateSetor(
       })
       .eq('id', id)
       .eq('company_id', companyId)
-      .select()
-      .single();
+      .select();
     
     if (error) throw error;
     
     toast.success(`Setor atualizado com sucesso`);
-    return data;
+    
+    // Garantir que o campo ativo esteja presente
+    if (!data || data.length === 0) return null;
+    
+    return data.map(setor => ({
+      ...setor,
+      ativo: setor.ativo ?? true
+    }))[0];
   } catch (error) {
     console.error("[SETORES] Error updating setor:", error);
     toast.error("Erro ao atualizar setor");
@@ -208,42 +255,47 @@ export async function updateSetor(
 }
 
 /**
- * Exclui um setor
+ * Desativa um setor (exclusão lógica/soft delete)
  * @param id ID do setor
  * @param companyId ID da empresa
- * @returns true se excluído com sucesso, false caso contrário
+ * @returns true se desativado com sucesso, false caso contrário
  */
 export async function deleteSetor(id: string, companyId: string): Promise<boolean> {
   if (!id || !companyId) return false;
   
   try {
-    // Verificar se o setor está sendo usado em produtos
+    // Ainda verificamos se o setor está em uso, para dar feedback adequado
+    // mesmo com exclusão lógica, é bom informar ao usuário
     const { data: products, error: productsError } = await supabase
       .from('products')
       .select('id')
       .eq('setor_id', id)
-      .limit(1);
+      .limit(1) as { data: any[] | null, error: any };
     
     if (productsError) throw productsError;
     
+    // Agora apenas informamos que o setor está em uso, mas podemos desativá-lo mesmo assim
+    // já que a exclusão é lógica
     if (products && products.length > 0) {
-      toast.error("Este setor está sendo usado em produtos e não pode ser excluído");
-      return false;
+      toast.warning("Este setor está sendo usado em produtos. Os produtos vinculados serão mantidos.");
+      // Continuamos com a desativação mesmo assim
     }
     
+    // Soft delete - apenas marcamos como inativo
+    const updateData: SetorUpdateData = { ativo: false };
     const { error } = await supabase
       .from('setores')
-      .delete()
+      .update(updateData)
       .eq('id', id)
       .eq('company_id', companyId);
     
     if (error) throw error;
     
-    toast.success("Setor excluído com sucesso");
+    toast.success("Setor desativado com sucesso");
     return true;
   } catch (error) {
-    console.error("[SETORES] Error deleting setor:", error);
-    toast.error("Erro ao excluir setor");
+    console.error("[SETORES] Error deactivating setor:", error);
+    toast.error("Erro ao desativar setor");
     return false;
   }
 }

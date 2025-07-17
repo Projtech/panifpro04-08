@@ -15,7 +15,7 @@ interface DeleteDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onConfirm: () => Promise<void>;
-  type: 'group' | 'subgroup';
+  type: 'group' | 'subgroup' | 'setor';
   loading?: boolean;
 }
 
@@ -32,8 +32,8 @@ const DeleteDialog: React.FC<DeleteDialogProps> = ({
         <DialogHeader>
           <DialogTitle>Confirmar Exclusão</DialogTitle>
           <DialogDescription>
-            Tem certeza que deseja excluir este {type === 'group' ? 'grupo' : 'subgrupo'}?
-            Esta ação não pode ser desfeita.
+            Tem certeza que deseja excluir este {type === 'group' ? 'grupo' : type === 'subgroup' ? 'subgrupo' : 'setor'}?
+            Esta ação não pode ser desfeita. O registro será apenas inativado no banco de dados e sumirá da lista.
           </DialogDescription>
         </DialogHeader>
         
