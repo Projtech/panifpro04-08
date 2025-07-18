@@ -128,7 +128,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         return;
       }
 
-      const needsChange = profile?.force_password_change ?? false;
+      // Log detalhado para debug
+      console.log(`[AuthContext] Profile retornado:`, profile);
+      console.log(`[AuthContext] force_password_change valor:`, profile?.force_password_change);
+      console.log(`[AuthContext] Tipo do valor:`, typeof profile?.force_password_change);
+      
+      // Lógica mais rigorosa: apenas true explícito força troca de senha
+      const needsChange = profile?.force_password_change === true;
       console.log(`[AuthContext] checkPasswordChangeRequirement para user ${currentUser.id}. Needs change: ${needsChange}`);
       
       if (isMounted.current) {
