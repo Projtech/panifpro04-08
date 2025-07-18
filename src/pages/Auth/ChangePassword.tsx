@@ -66,16 +66,33 @@ export function ChangePassword() {
       
       console.log('[ChangePassword] Atualizando force_password_change para user:', user.user.id);
       
-      const { error: profileError } = await supabase
+      const { data: updateData, error: profileError } = await supabase
         .from('profiles')
         .update({ force_password_change: false })
-        .eq('user_id', user.user.id);
+        .eq('user_id', user.user.id)
+        .select();
 
       if (profileError) {
         console.error('[ChangePassword] Erro ao atualizar profile:', profileError);
+        console.error('[ChangePassword] Detalhes do erro:', profileError.message, profileError.details, profileError.hint);
         // Não vamos falhar aqui, pois a senha já foi alterada
       } else {
         console.log('[ChangePassword] Profile atualizado com sucesso.');
+        console.log('[ChangePassword] Dados atualizados:', updateData);
+      }
+      
+      // Verificar se a atualização realmente aconteceu
+      console.log('[ChangePassword] Verificando se a atualização foi persistida...');
+      const { data: verifyProfile, error: verifyError } = await supabase
+        .from('profiles')
+        .select('force_password_change')
+        .eq('user_id', user.user.id)
+        .single();
+        
+      if (verifyError) {
+        console.error('[ChangePassword] Erro ao verificar atualização:', verifyError);
+      } else {
+        console.log('[ChangePassword] Verificação - force_password_change atual:', verifyProfile.force_password_change);
       }
 
       console.log('[ChangePassword] Processo concluído. Redirecionando...');
