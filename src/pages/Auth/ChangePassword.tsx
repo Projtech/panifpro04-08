@@ -49,9 +49,11 @@ export function ChangePassword() {
       window.isChangingPassword = true;
       
       // 1. Atualizar a senha no Supabase Auth
+      console.log('[ChangePassword] ANTES de updateUser');
       const { error: passwordError } = await supabase.auth.updateUser({ 
         password: password 
       });
+      console.log('[ChangePassword] DEPOIS de updateUser. Error:', passwordError);
 
       if (passwordError) {
         console.error('[ChangePassword] Erro ao atualizar senha no Auth:', passwordError);
