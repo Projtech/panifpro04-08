@@ -21,6 +21,8 @@ export function ChangePassword() {
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    console.log('[ChangePassword] Iniciando processo de alteração de senha...');
+    
     if (password !== confirmPassword) {
       toast({
         title: 'Erro',
@@ -41,39 +43,57 @@ export function ChangePassword() {
 
     setLoading(true);
     try {
+      console.log('[ChangePassword] Atualizando senha no Supabase Auth...');
+      
       // 1. Atualizar a senha no Supabase Auth
       const { error: passwordError } = await supabase.auth.updateUser({ 
         password: password 
       });
 
-      if (passwordError) throw passwordError;
+      if (passwordError) {
+        console.error('[ChangePassword] Erro ao atualizar senha no Auth:', passwordError);
+        throw passwordError;
+      }
+      
+      console.log('[ChangePassword] Senha atualizada no Auth. Atualizando profile...');
 
       // 2. Atualizar o campo force_password_change no profile
       const { data: user } = await supabase.auth.getUser();
-      if (user.user) {
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .update({ force_password_change: false })
-          .eq('user_id', user.user.id);
+      
+      if (!user.user) {
+        throw new Error('Usuário não encontrado após atualização da senha');
+      }
+      
+      console.log('[ChangePassword] Atualizando force_password_change para user:', user.user.id);
+      
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({ force_password_change: false })
+        .eq('user_id', user.user.id);
 
-        if (profileError) {
-          console.error('Erro ao atualizar profile:', profileError);
-        }
+      if (profileError) {
+        console.error('[ChangePassword] Erro ao atualizar profile:', profileError);
+        // Não vamos falhar aqui, pois a senha já foi alterada
+      } else {
+        console.log('[ChangePassword] Profile atualizado com sucesso.');
       }
 
+      console.log('[ChangePassword] Processo concluído. Redirecionando...');
+      
       toast({
         title: 'Senha alterada com sucesso!',
         description: 'Sua senha foi alterada. Redirecionando para o sistema...',
         variant: 'default',
       });
 
-      // 3. Aguardar um pouco e redirecionar para o dashboard
+      // 3. Redirecionar imediatamente para evitar problemas de estado
       setTimeout(() => {
-        navigate('/dashboard');
-      }, 1500);
+        console.log('[ChangePassword] Redirecionando para dashboard...');
+        navigate('/dashboard', { replace: true });
+      }, 1000);
 
     } catch (error: any) {
-      console.error('Erro ao alterar senha:', error);
+      console.error('[ChangePassword] Erro durante o processo:', error);
       toast({
         title: 'Erro ao alterar senha',
         description: error.message || 'Ocorreu um erro inesperado.',
