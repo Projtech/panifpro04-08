@@ -109,13 +109,35 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // Efeito para verificar se a senha precisa ser alterada
   const checkPasswordChangeRequirement = useCallback(async (currentUser: User | null) => {
-    // Verifica o metadado que pode vir do Supabase Auth ou do seu backend
-    const needsChange = currentUser?.user_metadata?.needs_password_change ?? false;
-    console.log(`[AuthContext] checkPasswordChangeRequirement para user ${currentUser?.id}. Needs change: ${needsChange}`);
-    if (isMounted.current) {
-      setNeedsPasswordChange(needsChange);
+    if (!currentUser) {
+      setNeedsPasswordChange(false);
+      return;
     }
-    // Não faz redirecionamento aqui, deixa isso para a UI
+
+    try {
+      // Verifica o campo force_password_change na tabela profiles
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('force_password_change')
+        .eq('user_id', currentUser.id)
+        .single();
+
+      if (error) {
+        console.error('[AuthContext] Erro ao verificar force_password_change:', error);
+        setNeedsPasswordChange(false);
+        return;
+      }
+
+      const needsChange = profile?.force_password_change ?? false;
+      console.log(`[AuthContext] checkPasswordChangeRequirement para user ${currentUser.id}. Needs change: ${needsChange}`);
+      
+      if (isMounted.current) {
+        setNeedsPasswordChange(needsChange);
+      }
+    } catch (error) {
+      console.error('[AuthContext] Erro ao verificar force_password_change:', error);
+      setNeedsPasswordChange(false);
+    }
   }, []);
 
   // Efeito para controlar o ciclo de vida do componente

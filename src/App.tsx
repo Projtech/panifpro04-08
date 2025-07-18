@@ -14,10 +14,12 @@ import { ProtectedRoute } from "./components/ProtectedRoute";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ForgotPassword } from "./pages/Auth/ForgotPassword";
 import { ResetPassword } from "./pages/Auth/ResetPassword";
+import { ChangePassword } from "./pages/Auth/ChangePassword";
 import { Login } from "./pages/Auth/Login";
 import { Signup } from "./pages/Auth/Signup";
 import { SelectCompany } from "./pages/Company/SelectCompany";
 import AutoLogout from "./components/AutoLogout";
+import { PasswordChangeGuard } from "./components/PasswordChangeGuard";
 
 import { AuthErrorHandler } from './components/AuthErrorHandler';
 import { supabase } from './integrations/supabase/client';
@@ -152,11 +154,13 @@ const App = () => {
               <BrowserRouter>
                 <AuthErrorHandler />
                 <AutoLogout inactivityTimeout={30 * 60 * 1000} /> {/* 30 minutos de inatividade */}
-                <Routes>
+                <PasswordChangeGuard>
+                  <Routes>
                   {/* Rotas públicas */}
                   <Route path="/login" element={<Login />} />
                   <Route path="/forgot-password" element={<ForgotPassword />} />
                   <Route path="/reset-password" element={<ResetPassword />} />
+                  <Route path="/change-password" element={<ChangePassword />} />
                   <Route path="/signup" element={<Signup />} />
                   <Route path="/select-company" element={
                     <ProtectedRoute>
@@ -342,7 +346,8 @@ const App = () => {
                   } />
                   
                   <Route path="*" element={<NotFound />} />
-                </Routes>
+                  </Routes>
+                </PasswordChangeGuard>
               </BrowserRouter>
             </TableConfigProvider>
           </AuthProvider>
