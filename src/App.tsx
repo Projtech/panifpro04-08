@@ -108,7 +108,7 @@ const App = () => {
         hiddenTimeoutId = window.setTimeout(async () => {
           // Se ainda estiver oculto após 5 segundos e não for uma atualização,
           // assumimos que o navegador foi fechado
-          if (isHidden && !isRefreshing) {
+          if (isHidden && !isRefreshing && !(window as any).isChangingPassword) {
             console.log('Aplicação provavelmente foi fechada, realizando logout...');
             await supabase.auth.signOut();
             localStorage.removeItem('activeCompany');

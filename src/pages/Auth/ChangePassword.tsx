@@ -45,6 +45,9 @@ export function ChangePassword() {
     try {
       console.log('[ChangePassword] Atualizando senha no Supabase Auth...');
       
+      // Sinalizar que estamos em processo de alteração de senha para evitar logout automático
+      window.isChangingPassword = true;
+      
       // 1. Atualizar a senha no Supabase Auth
       const { error: passwordError } = await supabase.auth.updateUser({ 
         password: password 
@@ -118,6 +121,8 @@ export function ChangePassword() {
       });
     } finally {
       setLoading(false);
+      // Remover flag de alteração de senha
+      window.isChangingPassword = false;
     }
   };
 
