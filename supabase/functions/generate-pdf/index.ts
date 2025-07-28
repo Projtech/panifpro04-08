@@ -62,8 +62,22 @@ serve(async (req) => {
     }
     
     // Criar cliente Supabase usando variáveis de ambiente
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') || 'https://zysejmuapexkkuhwkuql.supabase.co'
-    const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY') || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp5c2VqbXVhcGV4a2t1aHdrdXFsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDUzNTkwMDEsImV4cCI6MjA2MDkzNTAwMX0.hanYHMksGntl0PCYdRZcvl21gKaMJsV11ut-fRPUKwE'
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')
+    
+    if (!supabaseUrl) {
+      return new Response(
+        JSON.stringify({ error: 'SUPABASE_URL environment variable is required' }),
+        { status: 500, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
+    const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY')
+    
+    if (!supabaseKey) {
+      return new Response(
+        JSON.stringify({ error: 'SUPABASE_ANON_KEY environment variable is required' }),
+        { status: 500, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
     const supabase = createClient(supabaseUrl, supabaseKey)
     
     // Buscar dados usando a lógica otimizada

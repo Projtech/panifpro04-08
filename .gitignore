@@ -19,6 +19,21 @@ dist-ssr
 .env.production
 .env.backup
 
+# Sensitive configuration files
+.trae/
+execute_sql.cjs
+*.key
+*.pem
+*.p12
+*.pfx
+
+# Database credentials
+postgresql://
+
+# API keys and tokens
+**/config/secrets.*
+**/config/keys.*
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
