@@ -7,7 +7,9 @@ O erro que você está enfrentando:
 index-f67b2456.js:104 Uncaught Error: Missing Supabase environment variables. Please check your .env file.
 ```
 
-Este erro ocorre porque as **variáveis de ambiente do Supabase não estão configuradas no Vercel**.
+Este erro ocorre porque as **variáveis de ambiente do Supabase não estão configuradas no Vercel** ou não foram aplicadas ao deployment atual.
+
+⚠️ **IMPORTANTE**: Mudanças nas variáveis de ambiente só são aplicadas em **novos deployments**!
 
 ## ✅ Solução: Configurar Variáveis de Ambiente no Vercel
 
@@ -58,13 +60,27 @@ vercel env add VITE_SUPABASE_ANON_KEY
 
 ## 🔄 Após Configurar as Variáveis
 
-1. **Faça um novo deploy**:
-   - As variáveis só são aplicadas em **novos deployments**
-   - Faça um push para o GitHub ou clique em "Redeploy" no Vercel
+### Método 1: Redeploy via Dashboard (Mais Rápido)
+1. **No dashboard do Vercel**:
+   - Vá para a aba **"Deployments"**
+   - Encontre o deployment mais recente
+   - Clique nos **3 pontos (⋯)** ao lado do deployment
+   - Selecione **"Redeploy"**
+   - Confirme clicando em **"Redeploy"** novamente
 
-2. **Verifique se funcionou**:
-   - Acesse sua aplicação no Vercel
-   - O erro deve desaparecer
+### Método 2: Novo Push para GitHub
+1. **Faça qualquer mudança no código** (ex: adicione um comentário)
+2. **Commit e push**:
+   ```bash
+   git add .
+   git commit -m "Force redeploy for env vars"
+   git push origin main
+   ```
+
+### ✅ Verificação
+- Acesse sua aplicação no Vercel
+- A tela de login deve aparecer normalmente
+- O erro "Missing Supabase environment variables" deve desaparecer
 
 ## 🔍 Verificação das Variáveis
 
@@ -84,10 +100,39 @@ vercel env ls
 - **Ambientes**: Configure para `Production`, `Preview` e `Development`
 - **Redeploy**: Sempre faça um novo deploy após adicionar variáveis
 
+## 🔧 Troubleshooting
+
+### Problema: Variáveis ainda não funcionam após redeploy
+
+1. **Verifique se as variáveis estão corretas**:
+   - No Vercel Dashboard → Settings → Environment Variables
+   - Confirme que `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` estão listadas
+   - Verifique se estão marcadas para **Production**
+
+2. **Verifique o Build Logs**:
+   - Vá para Deployments → Clique no deployment → Build Logs
+   - Procure por erros relacionados às variáveis de ambiente
+
+3. **Verifique o Runtime Logs**:
+   - Vá para Deployments → Clique no deployment → Runtime Logs
+   - Procure por erros de "Missing Supabase environment variables"
+
+### Problema: Integração do Supabase não funciona
+
+1. **Remova e reinstale a integração**:
+   - Vercel Dashboard → Settings → Integrations
+   - Remova a integração do Supabase
+   - Reinstale via [Vercel Marketplace](https://vercel.com/marketplace/supabase)
+
+2. **Configure manualmente**:
+   - Se a integração não funcionar, configure as variáveis manualmente
+   - Use os valores do seu painel do Supabase
+
 ## 🔗 Links Úteis
 
-- [Documentação do Vercel - Environment Variables](https://vercel.com/docs/environment-variables)
-- [Supabase + Vercel Integration](https://vercel.com/marketplace/supabase)
+- [Documentação do Vercel - Environment Variables](https://vercel.com/docs/environment-variables) <mcreference link="https://vercel.com/docs/environment-variables" index="1">1</mcreference>
+- [Supabase + Vercel Integration](https://vercel.com/marketplace/supabase) <mcreference link="https://supabase.com/partners/integrations/vercel" index="4">4</mcreference>
+- [Vercel Redeploy Documentation](https://vercel.com/docs/deployments/redeploy)
 
 ---
 
