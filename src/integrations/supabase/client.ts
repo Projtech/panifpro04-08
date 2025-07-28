@@ -5,8 +5,15 @@ import type { Database } from './types';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
+// Debug temporário para verificar se a nova solução funcionou
+console.log('🔍 Debug - Verificando variáveis após solução Node.js:');
+console.log('VITE_SUPABASE_URL:', SUPABASE_URL ? '✅ Carregada' : '❌ Undefined');
+console.log('VITE_SUPABASE_ANON_KEY:', SUPABASE_PUBLISHABLE_KEY ? '✅ Carregada' : '❌ Undefined');
+console.log('Total de variáveis VITE_:', Object.keys(import.meta.env).filter(key => key.startsWith('VITE_')).length);
+
 if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
   console.error('❌ Missing Supabase environment variables!');
+  console.log('Todas as variáveis disponíveis:', Object.keys(import.meta.env));
   throw new Error('Missing Supabase environment variables. Please check your .env file.');
 }
 
