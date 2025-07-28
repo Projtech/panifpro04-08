@@ -102,7 +102,48 @@ vercel env ls
 
 ## 🔧 Troubleshooting
 
-### Problema: Variáveis ainda não funcionam após redeploy
+### ⚠️ Problema Conhecido: Vite + Vercel - Variáveis de Ambiente
+
+**Sintoma Principal:**
+- Aplicação funciona localmente mas falha no Vercel
+- Erro: "Missing Supabase environment variables"
+- Variáveis `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` aparecem como `undefined`
+- Logs mostram: `VITE_SUPABASE_URL: ❌ Undefined`
+
+**Causa Raiz:**
+O Vite no Vercel não consegue ler corretamente as variáveis de ambiente do sistema durante o processo de build, mesmo quando elas estão configuradas no Dashboard do Vercel.
+
+**✅ Solução Implementada:**
+
+Este projeto já inclui uma solução automática:
+
+1. **Script de Build Personalizado** (`vercel-build.sh`):
+   - Cria um arquivo `.env` antes do build
+   - Copia as variáveis do sistema para o arquivo `.env`
+   - Permite que o Vite leia as variáveis corretamente
+
+2. **Configuração do Vercel** (`vercel.json`):
+   - Usa o comando `npm run build:vercel`
+   - Executa o script personalizado automaticamente
+
+3. **Package.json atualizado:**
+   - Inclui o script `build:vercel`
+   - Mantém compatibilidade com builds locais
+
+**Como Verificar se a Solução Está Funcionando:**
+
+1. Após o deployment, verifique os logs de build
+2. Procure por estas mensagens:
+   ```
+   🔧 Criando arquivo .env com variáveis de ambiente do sistema...
+   📄 Conteúdo do arquivo .env criado:
+   VITE_SUPABASE_URL=https://...
+   VITE_SUPABASE_ANON_KEY=eyJ...
+   ```
+
+### Outros Problemas Comuns
+
+**Problema: Variáveis ainda não funcionam após redeploy**
 
 1. **Verifique se as variáveis estão corretas**:
    - No Vercel Dashboard → Settings → Environment Variables
