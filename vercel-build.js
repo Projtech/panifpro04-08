@@ -9,9 +9,17 @@ import { execSync } from 'child_process';
 
 console.log('🔧 Criando arquivo .env com variáveis de ambiente do sistema...');
 
-// Obter variáveis de ambiente
-const supabaseUrl = process.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY;
+// Obter variáveis de ambiente - tentando ambas as convenções
+const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
+
+// Debug: mostrar todas as variáveis de ambiente disponíveis
+console.log('🔍 Todas as variáveis de ambiente disponíveis:');
+Object.keys(process.env)
+  .filter(key => key.includes('SUPABASE'))
+  .forEach(key => {
+    console.log(`${key}: ${process.env[key] ? '✅ Definida' : '❌ Undefined'}`);
+  });
 
 // Criar conteúdo do .env
 const envContent = `VITE_SUPABASE_URL=${supabaseUrl || ''}
