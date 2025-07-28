@@ -22,7 +22,8 @@ import AutoLogout from "./components/AutoLogout";
 import { PasswordChangeGuard } from "./components/PasswordChangeGuard";
 
 import { AuthErrorHandler } from './components/AuthErrorHandler';
-import { supabase } from './integrations/supabase/client';
+import { LogoutManager } from './services/LogoutManager';
+import { sessionMonitor } from './utils/sessionMonitor';
 
 // Application Components
 import AppLayout from "./components/Layout/AppLayout";
@@ -61,6 +62,40 @@ const App = () => {
     };
   }, []);
   
+  useEffect(() => {
+    // Configurar logs para debug
+    console.log('🚀 App iniciado - MODO DEBUG ATIVO');
+    
+    // Inicializar monitor de sessão
+    console.log('🔍 Inicializando SessionMonitor...');
+    sessionMonitor.startMonitoring();
+    
+    // Limpar localStorage em caso de dados corrompidos
+    const cleanupCorruptedData = () => {
+      try {
+        const keys = Object.keys(localStorage);
+        keys.forEach(key => {
+          if (key.startsWith('sb-') && key.includes('auth-token')) {
+            const value = localStorage.getItem(key);
+            if (value && value.includes('undefined') || value === 'undefined') {
+              console.warn('🧹 Removendo token corrompido:', key);
+              localStorage.removeItem(key);
+            }
+          }
+        });
+      } catch (error) {
+        console.error('❌ Erro ao limpar dados corrompidos:', error);
+      }
+    };
+    
+    cleanupCorruptedData();
+    
+    // Cleanup ao desmontar
+    return () => {
+      sessionMonitor.stopMonitoring();
+    };
+  }, []);
+  
   // INÍCIO DO CÓDIGO ADICIONADO - Redirecionamento convite/reset
   useEffect(() => {
     const currentPath = window.location.pathname;
@@ -76,72 +111,9 @@ const App = () => {
   }, []);
   // FIM DO CÓDIGO ADICIONADO
 
-  // INÍCIO DO CÓDIGO PARA LOGOUT AO FECHAR A APLICAÇÃO
-  useEffect(() => {
-    // Variável para controlar se é uma atualização de página ou fechamento
-    let isRefreshing = false;
-    // Variável para controlar se a página está apenas oculta (minimizada/em segundo plano)
-    let isHidden = false;
-    // Variável para armazenar o ID do timeout
-    let hiddenTimeoutId: number | null = null;
-
-    // Função para marcar que é uma atualização
-    const markRefreshing = () => {
-      isRefreshing = true;
-      // Definimos um timeout curto para resetar a flag caso seja uma navegação normal
-      setTimeout(() => {
-        isRefreshing = false;
-      }, 300); // Aumentado para 300ms para acomodar conexões mais lentas
-    };
-
-    // Adicionamos listener para eventos que indicam atualização de página
-    window.addEventListener('beforeunload', markRefreshing);
-    
-    // Função para lidar com o evento visibilitychange
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') {
-        // A página ficou oculta (minimizada, aba em segundo plano, etc.)
-        isHidden = true;
-        
-        // Configuramos um timeout longo (5 segundos) para distinguir entre
-        // minimizar/alternar janelas e fechar o navegador
-        hiddenTimeoutId = window.setTimeout(async () => {
-          // Se ainda estiver oculto após 5 segundos e não for uma atualização,
-          // assumimos que o navegador foi fechado
-          if (isHidden && !isRefreshing && !(window as any).isChangingPassword) {
-            console.log('Aplicação provavelmente foi fechada, realizando logout...');
-            await supabase.auth.signOut();
-            localStorage.removeItem('activeCompany');
-          }
-          hiddenTimeoutId = null;
-        }, 5000) as unknown as number;
-      } else {
-        // A página ficou visível novamente (maximizada, aba em primeiro plano)
-        isHidden = false;
-        
-        // Cancelamos o timeout se a página voltar a ficar visível antes do tempo
-        if (hiddenTimeoutId !== null) {
-          clearTimeout(hiddenTimeoutId);
-          hiddenTimeoutId = null;
-        }
-      }
-    };
-
-    // Adiciona o event listener para visibilitychange
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    // Remove os event listeners quando o componente for desmontado
-    return () => {
-      window.removeEventListener('beforeunload', markRefreshing);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      
-      // Limpa o timeout se existir
-      if (hiddenTimeoutId !== null) {
-        clearTimeout(hiddenTimeoutId);
-      }
-    };
-  }, []);
-  // FIM DO CÓDIGO PARA LOGOUT AO FECHAR A APLICAÇÃO
+  // CÓDIGO PARA LOGOUT AO FECHAR A APLICAÇÃO - TEMPORARIAMENTE REMOVIDO PARA DEPURAÇÃO
+  // TODO: Reativar quando necessário
+  // FIM DO CÓDIGO PARA LOGOUT AO FECHAR A APLICAÇÃO - TEMPORARIAMENTE REMOVIDO
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -150,11 +122,18 @@ const App = () => {
         <Sonner />
         <HelmetProvider>
           <AuthProvider>
-            <TableConfigProvider>
-              <BrowserRouter>
-                <AuthErrorHandler />
-                <AutoLogout inactivityTimeout={30 * 60 * 1000} /> {/* 30 minutos de inatividade */}
-                <PasswordChangeGuard>
+              <TableConfigProvider>
+                <BrowserRouter
+                  future={{
+                    v7_startTransition: true,
+                    v7_relativeSplatPath: true,
+                  }}
+                >
+                  {/* TEMPORARIAMENTE COMENTADO PARA DEPURAÇÃO */}
+                  {/* <AuthErrorHandler /> */}
+                  {/* <VisibilityHandler /> DESABILITADO TEMPORARIAMENTE PARA DEBUG */}
+                  {/* <AutoLogout inactivityTimeout={30 * 60 * 1000} /> */}
+                  <PasswordChangeGuard>
                   <Routes>
                   {/* Rotas públicas */}
                   <Route path="/login" element={<Login />} />

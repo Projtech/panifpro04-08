@@ -1,7 +1,12 @@
+// TEMPORARIAMENTE DESABILITADO - AuthErrorHandler
+// Todo o conteúdo foi comentado para evitar logout automático
+
+/*
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
+import { LogoutManager } from '@/services/LogoutManager';
 
 /**
  * Componente responsável por observar o estado `authError` do AuthContext.
@@ -12,7 +17,7 @@ import { useAuth } from '@/contexts/AuthContext';
  * 4. Redireciona para a página de login.
  */
 export function AuthErrorHandler() {
-  const { authError, signOut, loading } = useAuth();
+  const { authError, loading } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -39,11 +44,14 @@ export function AuthErrorHandler() {
       timerId = setTimeout(async () => {
         console.log('[AuthErrorHandler] Tempo esgotado. Deslogando e redirecionando...');
         try {
-          await signOut();
-          navigate('/login', { replace: true }); 
-        } catch (signOutError) {
-          console.error("[AuthErrorHandler] Erro durante o signOut:", signOutError);
-          // Mesmo em caso de erro no signOut, tenta redirecionar
+          await LogoutManager.logout({
+            reason: 'auth_error',
+            showNotification: false, // Não mostrar notificação adicional pois já foi mostrada
+            errorMessage: authError
+          });
+        } catch (logoutError) {
+          console.error("[AuthErrorHandler] Erro durante o logout:", logoutError);
+          // Em caso de erro, força redirecionamento
           navigate('/login', { replace: true });
         }
       }, 2500); // Tempo de espera em milissegundos (2.5 segundos)
@@ -57,8 +65,15 @@ export function AuthErrorHandler() {
       }
     };
     
-  }, [authError, loading, signOut, navigate]); // Dependências do useEffect
+  }, [authError, loading, navigate]); // Dependências do useEffect
 
   // Este componente não renderiza nada visualmente
+  return null;
+}
+*/
+
+// Componente vazio temporário
+export function AuthErrorHandler() {
+  console.log('[AuthErrorHandler] DESABILITADO - Não executando lógica de logout automático');
   return null;
 }

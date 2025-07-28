@@ -1,5 +1,9 @@
+// TEMPORARIAMENTE DESABILITADO - AutoLogout
+// Todo o conteúdo foi comentado para evitar logout automático por inatividade
+
+/*
 import React, { useEffect, useState, useRef } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
+import { LogoutManager } from '@/services/LogoutManager';
 
 interface AutoLogoutProps {
   inactivityTimeout?: number; // Tempo em milissegundos
@@ -8,7 +12,6 @@ interface AutoLogoutProps {
 export const AutoLogout: React.FC<AutoLogoutProps> = ({ 
   inactivityTimeout = 30 * 60 * 1000 // 30 minutos por padrão
 }) => {
-  const { signOut } = useAuth();
   const [lastActivity, setLastActivity] = useState<number>(Date.now());
   const isPageVisible = useRef<boolean>(true);
   
@@ -27,7 +30,11 @@ export const AutoLogout: React.FC<AutoLogoutProps> = ({
         
         if (timeSinceLastActivity >= inactivityTimeout) {
           console.log('Inatividade detectada, realizando logout automático...');
-          signOut();
+          LogoutManager.logout({
+            reason: 'inactivity',
+            showNotification: true,
+            notificationMessage: 'Sessão expirada por inatividade'
+          });
         }
       }
     };
@@ -66,10 +73,18 @@ export const AutoLogout: React.FC<AutoLogoutProps> = ({
       });
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       clearInterval(intervalId);
-    };
-  }, [lastActivity, inactivityTimeout, signOut]);
+    };  }, [lastActivity, inactivityTimeout]);
   
   // Este componente não renderiza nada visualmente
+  return null;
+};
+
+export default AutoLogout;
+*/
+
+// Componente vazio temporário
+export const AutoLogout: React.FC<{ inactivityTimeout?: number }> = () => {
+  console.log('[AutoLogout] DESABILITADO - Não executando lógica de logout por inatividade');
   return null;
 };
 

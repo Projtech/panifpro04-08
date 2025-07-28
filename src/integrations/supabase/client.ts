@@ -8,14 +8,21 @@ const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiO
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
-// Opções para o cliente Supabase, especificando localStorage para auth
+// Opções para o cliente Supabase - CONFIGURAÇÃO OTIMIZADA PARA EVITAR LOGOUT AUTOMÁTICO
 const supabaseOptions: SupabaseClientOptions<"public"> = {
   auth: {
     storage: localStorage, // Usar localStorage para permitir atualizações de página
-    autoRefreshToken: true,
-    persistSession: true, // Permitir persistência para atualizações de página
-    detectSessionInUrl: true
+    autoRefreshToken: true, // Manter refresh automático
+    persistSession: true, // Manter persistência para evitar logout
+    detectSessionInUrl: false, // DESABILITAR para evitar conflitos com mudanças de URL
+    flowType: 'pkce' // Usar PKCE flow para melhor segurança
   },
+  // Configurações globais para evitar timeouts
+  global: {
+    headers: {
+      'X-Client-Info': 'panifpro-web-client'
+    }
+  }
 };
 
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, supabaseOptions);
