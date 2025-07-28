@@ -5,7 +5,15 @@ import type { Database } from './types';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
+// 🔍 Debug logs para Vercel (remover após resolver o problema)
+console.log('🔍 Debug - Supabase Environment Variables:');
+console.log('VITE_SUPABASE_URL:', SUPABASE_URL ? '✅ Definida' : '❌ Undefined');
+console.log('VITE_SUPABASE_ANON_KEY:', SUPABASE_PUBLISHABLE_KEY ? '✅ Definida' : '❌ Undefined');
+console.log('Todas as variáveis VITE_:', Object.keys(import.meta.env).filter(key => key.startsWith('VITE_')));
+
 if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
+  console.error('❌ Missing Supabase environment variables!');
+  console.log('Available environment variables:', Object.keys(import.meta.env));
   throw new Error('Missing Supabase environment variables. Please check your .env file.');
 }
 
