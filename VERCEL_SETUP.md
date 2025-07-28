@@ -26,12 +26,12 @@ Este erro ocorre porque as **variáveis de ambiente do Supabase não estão conf
    
    **Variável 1:**
    - **Name**: `VITE_SUPABASE_URL`
-   - **Value**: `https://zysejmuapexkkuhwkuql.supabase.co`
+   - **Value**: `[SUA_URL_DO_SUPABASE]` (encontre no painel do Supabase)
    - **Environments**: Marque `Production`, `Preview`, e `Development`
    
    **Variável 2:**
    - **Name**: `VITE_SUPABASE_ANON_KEY`
-   - **Value**: `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp5c2VqbXVhcGV4a2t1aHdrdXFsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDc5MTkwNTgsImV4cCI6MjA2MzQ5NTA1OH0.wHjcgLLwDe8vSXp8Z5khMM8x145Oed5Qr_BouoyYw2c`
+   - **Value**: `[SUA_CHAVE_ANON_DO_SUPABASE]` (encontre no painel do Supabase)
    - **Environments**: Marque `Production`, `Preview`, e `Development`
 
 4. **Clique em "Save"** para cada variável
@@ -50,10 +50,10 @@ cd "c:\Projetos app\26-07\panifpro04-08"
 
 # Adicionar variáveis de ambiente
 vercel env add VITE_SUPABASE_URL
-# Cole: https://zysejmuapexkkuhwkuql.supabase.co
+# Cole sua URL do Supabase (encontre no painel do Supabase)
 
 vercel env add VITE_SUPABASE_ANON_KEY
-# Cole: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp5c2VqbXVhcGV4a2t1aHdrdXFsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDc5MTkwNTgsImV4cCI6MjA2MzQ5NTA1OH0.wHjcgLLwDe8vSXp8Z5khMM8x145Oed5Qr_BouoyYw2c
+# Cole sua chave anon do Supabase (encontre no painel do Supabase)
 ```
 
 ## 🔄 Após Configurar as Variáveis
