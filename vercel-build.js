@@ -4,8 +4,8 @@
 // As variáveis de ambiente do sistema não são lidas corretamente pelo Vite
 // Este script cria um arquivo .env antes do build
 
-const fs = require('fs');
-const { execSync } = require('child_process');
+import fs from 'fs';
+import { execSync } from 'child_process';
 
 console.log('🔧 Criando arquivo .env com variáveis de ambiente do sistema...');
 
